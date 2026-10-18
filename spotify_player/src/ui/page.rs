@@ -73,8 +73,8 @@ pub fn render_search_page(
     let rect = construct_and_render_block("Search", &ui.theme, Borders::ALL, frame, rect);
 
     let status = match search_entry {
-        Some(SearchCacheEntry::Loading) => Some("Loading..."),
-        Some(SearchCacheEntry::Failed) => Some("Search failed"),
+        Some(SearchCacheEntry::Loading) => Some(utils::loading_text()),
+        Some(SearchCacheEntry::Failed) => Some("Search failed".to_string()),
         _ => None,
     };
 
@@ -514,7 +514,7 @@ pub fn render_context_page(
             }
         }
         None => {
-            frame.render_widget(Paragraph::new("Loading..."), rect);
+            frame.render_widget(Paragraph::new(utils::loading_text()), rect);
         }
     }
 }
@@ -724,7 +724,7 @@ pub fn render_browse_page(
                     construct_and_render_block("Categories", &ui.theme, Borders::ALL, frame, rect);
 
                 let Some(categories) = data.browse.categories.as_deref() else {
-                    frame.render_widget(Paragraph::new("Loading..."), rect);
+                    frame.render_widget(Paragraph::new(utils::loading_text()), rect);
                     return;
                 };
 
@@ -743,7 +743,7 @@ pub fn render_browse_page(
                 rect = construct_and_render_block(&title, &ui.theme, Borders::ALL, frame, rect);
 
                 let Some(playlists) = data.browse.category_playlists.get(&category.id) else {
-                    frame.render_widget(Paragraph::new("Loading..."), rect);
+                    frame.render_widget(Paragraph::new(utils::loading_text()), rect);
                     return;
                 };
 
@@ -801,7 +801,7 @@ pub fn render_lyrics_page(
 
     let lyrics = match data.caches.lyrics.get(track_uri) {
         None => {
-            frame.render_widget(Paragraph::new("Loading..."), rect);
+            frame.render_widget(Paragraph::new(utils::loading_text()), rect);
             return;
         }
         Some(None) => {

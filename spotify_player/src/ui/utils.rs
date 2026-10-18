@@ -5,6 +5,17 @@ use super::{
 use crate::state::WindowRegion;
 use unicode_bidi::BidiInfo;
 
+/// Placeholder for content that is still loading, explaining waits caused by Spotify's rate limit.
+pub fn loading_text() -> String {
+    match crate::client::rate_limit_remaining() {
+        Some(remaining) => format!(
+            "Loading... (rate limited by Spotify, retrying in {}s)",
+            remaining.as_secs().max(1)
+        ),
+        None => "Loading...".to_string(),
+    }
+}
+
 /// Construct and render a block.
 ///
 /// This function should only be used to render a window's borders and its title.

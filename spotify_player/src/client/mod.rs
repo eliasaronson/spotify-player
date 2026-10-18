@@ -33,6 +33,7 @@ mod request;
 mod spotify;
 
 pub use handlers::*;
+pub use middleware::rate_limit_remaining;
 use middleware::SpotifyApiMiddleware;
 pub use request::*;
 use serde::Deserialize;

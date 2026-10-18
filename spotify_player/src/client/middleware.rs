@@ -13,6 +13,17 @@ use tokio::{
 
 const GET_DEDUPLICATION_WINDOW: Duration = Duration::from_secs(1);
 
+/// End of the latest `Retry-After` period, shared with the UI to explain stalled requests.
+static RATE_LIMITED_UNTIL: parking_lot::Mutex<Option<std::time::Instant>> =
+    parking_lot::Mutex::new(None);
+
+/// Time left until Spotify's latest rate limit ends, if one is active.
+pub fn rate_limit_remaining() -> Option<Duration> {
+    let until = (*RATE_LIMITED_UNTIL.lock())?;
+    let remaining = until.saturating_duration_since(std::time::Instant::now());
+    (!remaining.is_zero()).then_some(remaining)
+}
+
 #[derive(Clone, Debug)]
 struct CachedResponse {
     status: StatusCode,
@@ -162,6 +173,13 @@ impl SpotifyApiRequestManager {
 
     async fn store_retry_after(&self, retry_after: Duration) {
         let retry_after_until = Instant::now() + retry_after + Duration::from_secs(1);
+        {
+            let mut rate_limited_until = RATE_LIMITED_UNTIL.lock();
+            let until = retry_after_until.into_std();
+            if rate_limited_until.is_none_or(|current| current < until) {
+                *rate_limited_until = Some(until);
+            }
+        }
         let mut state = self.state.lock().await;
         if state
             .retry_after_until
