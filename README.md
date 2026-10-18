@@ -378,6 +378,8 @@ cargo install spotify_player --features notify
 - Double-click an item to choose it (same as `ChooseSelected`, `enter` by default).
 - Scroll over a window to focus it and move its selection.
 - These also work in list popups (devices, actions, playlists, …). Other popups block the page behind them, except the `/` search popup.
+- Scroll the queue, command help and logs pages.
+- Left-click a lyrics line to seek to it.
 - Left-click the playback progress bar to seek.
 - With `enable_mouse_scroll_volume`, scrolling outside of page windows changes the volume.
 

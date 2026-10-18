@@ -149,6 +149,8 @@ pub enum PageWindow {
     Artist(ArtistFocusState),
     /// The open popup's list
     Popup,
+    /// The lyrics page's lines
+    Lyrics,
 }
 
 /// Where a page window was drawn in the last frame, used to map mouse events to its items.

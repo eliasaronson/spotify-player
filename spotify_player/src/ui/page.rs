@@ -859,14 +859,14 @@ pub fn render_lyrics_page(
         })
         .collect::<Vec<_>>();
 
-    let mut paragraph = Paragraph::new(lines);
+    let n_lines = lines.len();
     // keep the currently playing line in the center if
     // the line goes pass the lower half of lyrics section
     let half_height = (chunks[1].height / 2) as usize;
-    if let Some(offset) = last_played_line_id.checked_sub(half_height) {
-        paragraph = paragraph.scroll((offset as u16, 0));
-    }
-    frame.render_widget(paragraph, chunks[1]);
+    let offset = last_played_line_id.saturating_sub(half_height);
+    frame.render_widget(Paragraph::new(lines).scroll((offset as u16, 0)), chunks[1]);
+    ui.window_regions
+        .push(WindowRegion::new(chunks[1], 0, offset, n_lines).window(PageWindow::Lyrics));
 }
 
 pub fn render_commands_help_page(frame: &mut Frame, ui: &mut UIStateGuard, rect: Rect) {
@@ -904,6 +904,8 @@ pub fn render_commands_help_page(frame: &mut Frame, ui: &mut UIStateGuard, rect:
 
     // 2. Construct the page's layout
     let rect = construct_and_render_block("Commands", &ui.theme, Borders::ALL, frame, rect);
+    ui.window_regions
+        .push(WindowRegion::new(rect, 1, scroll_offset, map.len()));
 
     // 3. Construct the page's widget
     let help_table = Table::new(
@@ -993,6 +995,8 @@ pub fn render_queue_page(
 
     // 2. Construct the page's layout
     let rect = construct_and_render_block("Queue", &ui.theme, Borders::ALL, frame, rect);
+    ui.window_regions
+        .push(WindowRegion::new(rect, 1, scroll_offset, queue.len()));
 
     // 3. Construct the page's widget
     let queue_table = Table::new(
@@ -1579,4 +1583,6 @@ pub fn render_logs_page(frame: &mut Frame, state: &SharedState, ui: &mut UIState
 
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, rect);
+    ui.window_regions
+        .push(WindowRegion::new(rect, 0, scroll_offset, logs.len()));
 }

@@ -12,8 +12,8 @@ use crate::{
         ActionListItem, Album, AlbumId, Artist, ArtistFocusState, ArtistId, ArtistPopupAction,
         BrowsePageUIState, ConfirmableAction, Context, ContextId, ContextPageType,
         ContextPageUIState, DataReadGuard, Focusable, Id, Item, ItemId, LibraryFocusState,
-        LibraryPageUIState, PageState, PageType, PageWindow, PlayableId, Playback,
-        PlaylistCreateCurrentField, PlaylistFolderItem, PlaylistId, PlaylistPopupAction,
+        LibraryPageUIState, MutableWindowState, PageState, PageType, PageWindow, PlayableId,
+        Playback, PlaylistCreateCurrentField, PlaylistFolderItem, PlaylistId, PlaylistPopupAction,
         PopupState, SearchFocusState, SearchPageUIState, SharedState, ShowId, Track, TrackId,
         TrackOrder, TracksId, UIStateGuard, WindowRegion, USER_LIKED_TRACKS_ID,
         USER_RECENTLY_PLAYED_TRACKS_ID, USER_TOP_TRACKS_ID,
@@ -211,6 +211,20 @@ fn click_window_at(
     let Some(region) = window_region_at(&ui, event) else {
         return Ok(());
     };
+    if region.window == PageWindow::Lyrics {
+        if let Some(line) = region.item_at(event.row) {
+            seek_to_lyrics_line(line, client_pub, state, &ui)?;
+        }
+        return Ok(());
+    }
+    // a click would make a scrolled page jump to the clicked row, so only the wheel scrolls it
+    if matches!(
+        ui.current_page_mut().focus_window_state_mut(),
+        Some(MutableWindowState::Scroll(_))
+    ) && region.window != PageWindow::Popup
+    {
+        return Ok(());
+    }
     focus_window(&mut ui, region.window);
     let Some(index) = region.item_at(event.row) else {
         ui.last_click = None;
@@ -251,6 +265,37 @@ fn click_window_at(
         }
     } else {
         ui.last_click = Some((now, region.window, index));
+    }
+    Ok(())
+}
+
+/// Seek to the `line`-th line of the lyrics page, if they are the current track's lyrics.
+fn seek_to_lyrics_line(
+    line: usize,
+    client_pub: &flume::Sender<ClientRequest>,
+    state: &SharedState,
+    ui: &UIStateGuard,
+) -> Result<()> {
+    let PageState::Lyrics { track_uri, .. } = ui.current_page() else {
+        return Ok(());
+    };
+    let is_current_track = state
+        .player
+        .read()
+        .currently_playing()
+        .is_some_and(|item| match item {
+            rspotify::model::PlayableItem::Track(track) => {
+                track.id.as_ref().map(rspotify::prelude::Id::uri).as_ref() == Some(track_uri)
+            }
+            _ => false,
+        });
+    if !is_current_track {
+        return Ok(());
+    }
+    if let Some(Some(lyrics)) = state.data.read().caches.lyrics.get(track_uri) {
+        if let Some((time, _)) = lyrics.lines.get(line) {
+            client_pub.send(ClientRequest::Player(PlayerRequest::SeekTrack(*time)))?;
+        }
     }
     Ok(())
 }
