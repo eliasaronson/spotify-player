@@ -12,10 +12,11 @@ use crate::{
         ActionListItem, Album, AlbumId, Artist, ArtistFocusState, ArtistId, ArtistPopupAction,
         BrowsePageUIState, ConfirmableAction, Context, ContextId, ContextPageType,
         ContextPageUIState, DataReadGuard, Focusable, Id, Item, ItemId, LibraryFocusState,
-        LibraryPageUIState, PageState, PageType, PlayableId, Playback, PlaylistCreateCurrentField,
-        PlaylistFolderItem, PlaylistId, PlaylistPopupAction, PopupState, SearchFocusState,
-        SearchPageUIState, SharedState, ShowId, Track, TrackId, TrackOrder, TracksId, UIStateGuard,
-        WindowRegion, USER_LIKED_TRACKS_ID, USER_RECENTLY_PLAYED_TRACKS_ID, USER_TOP_TRACKS_ID,
+        LibraryPageUIState, PageState, PageType, PageWindow, PlayableId, Playback,
+        PlaylistCreateCurrentField, PlaylistFolderItem, PlaylistId, PlaylistPopupAction,
+        PopupState, SearchFocusState, SearchPageUIState, SharedState, ShowId, Track, TrackId,
+        TrackOrder, TracksId, UIStateGuard, WindowRegion, USER_LIKED_TRACKS_ID,
+        USER_RECENTLY_PLAYED_TRACKS_ID, USER_TOP_TRACKS_ID,
     },
     ui::{single_line_input::LineInput, Orientation},
     utils::parse_uri,
@@ -146,18 +147,39 @@ fn seek_on_progress_bar_click(
     Ok(true)
 }
 
-/// The page window under the mouse. Page windows don't react to the mouse while a popup is open.
+/// The window under the mouse. While a popup is open, only its list reacts to the mouse, except
+/// for the search popup, which filters the page and leaves it interactive.
 fn window_region_at(
     ui: &UIStateGuard,
     event: crossterm::event::MouseEvent,
 ) -> Option<WindowRegion> {
-    if ui.popup.is_some() {
-        return None;
-    }
+    let page_interactive = matches!(ui.popup, None | Some(PopupState::Search { .. }));
     ui.window_regions
         .iter()
+        .filter(|region| page_interactive || region.window == PageWindow::Popup)
         .find(|region| region.contains(event.column, event.row))
         .copied()
+}
+
+/// Focus `window`, returning its selected item.
+fn focus_window(ui: &mut UIStateGuard, window: PageWindow) -> Option<usize> {
+    if window == PageWindow::Popup {
+        ui.popup.as_ref().and_then(PopupState::list_selected)
+    } else {
+        let page = ui.current_page_mut();
+        page.focus_window(window);
+        page.selected()
+    }
+}
+
+fn select_in_window(ui: &mut UIStateGuard, window: PageWindow, index: usize) {
+    if window == PageWindow::Popup {
+        if let Some(popup) = ui.popup.as_mut() {
+            popup.list_select(Some(index));
+        }
+    } else {
+        ui.current_page_mut().select(index);
+    }
 }
 
 /// Focus the window under the mouse and move its selection. Returns whether a window was hit.
@@ -169,14 +191,13 @@ fn scroll_window_at(event: crossterm::event::MouseEvent, down: bool, state: &Sha
     if region.len == 0 {
         return true;
     }
-    let page = ui.current_page_mut();
-    page.focus_window(region.window);
-    let selected = page.selected().unwrap_or(0);
-    page.select(if down {
+    let selected = focus_window(&mut ui, region.window).unwrap_or(0);
+    let index = if down {
         (selected + MOUSE_SCROLL_ITEMS).min(region.len - 1)
     } else {
         selected.saturating_sub(MOUSE_SCROLL_ITEMS)
-    });
+    };
+    select_in_window(&mut ui, region.window, index);
     true
 }
 
@@ -190,12 +211,12 @@ fn click_window_at(
     let Some(region) = window_region_at(&ui, event) else {
         return Ok(());
     };
-    ui.current_page_mut().focus_window(region.window);
+    focus_window(&mut ui, region.window);
     let Some(index) = region.item_at(event.row) else {
         ui.last_click = None;
         return Ok(());
     };
-    ui.current_page_mut().select(index);
+    select_in_window(&mut ui, region.window, index);
 
     let now = std::time::Instant::now();
     let is_double_click = ui.last_click.is_some_and(|(time, window, item)| {
@@ -212,7 +233,21 @@ fn click_window_at(
             .iter()
             .find(|k| k.command == Command::ChooseSelected)
         {
-            page::handle_key_sequence_for_page(&keymap.key_sequence, client_pub, state, &mut ui)?;
+            if ui.popup.is_some() {
+                popup::handle_key_sequence_for_popup(
+                    &keymap.key_sequence,
+                    client_pub,
+                    state,
+                    &mut ui,
+                )?;
+            } else {
+                page::handle_key_sequence_for_page(
+                    &keymap.key_sequence,
+                    client_pub,
+                    state,
+                    &mut ui,
+                )?;
+            }
         }
     } else {
         ui.last_click = Some((now, region.window, index));

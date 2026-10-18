@@ -147,6 +147,8 @@ pub enum PageWindow {
     Library(LibraryFocusState),
     Search(SearchFocusState),
     Artist(ArtistFocusState),
+    /// The open popup's list
+    Popup,
 }
 
 /// Where a page window was drawn in the last frame, used to map mouse events to its items.

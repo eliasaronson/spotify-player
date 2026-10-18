@@ -1,4 +1,4 @@
-use crate::{command::Command, utils::filtered_items_from_query};
+use crate::{command::Command, state::PageWindow, utils::filtered_items_from_query};
 
 use super::{
     config, utils, utils::construct_and_render_block, Borders, Cell, Constraint, Frame, Layout,
@@ -240,13 +240,15 @@ fn render_list_popup(
     let selected_index = ui.popup.as_ref().and_then(PopupState::list_selected);
     let (list, len) = utils::construct_list_widget(&ui.theme, items, true, selected_index);
 
-    utils::render_list_window(
+    let region = utils::render_list_window(
         frame,
         list,
         rect,
         len,
         ui.popup.as_mut().unwrap().list_state_mut().unwrap(),
-    );
+    )
+    .window(PageWindow::Popup);
+    ui.window_regions.push(region);
 
     chunks[0]
 }
