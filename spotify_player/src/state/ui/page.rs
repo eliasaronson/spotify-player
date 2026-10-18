@@ -2,7 +2,10 @@ use crate::{
     state::model::{Category, ContextId},
     ui::single_line_input::LineInput,
 };
-use ratatui::widgets::{ListState, TableState};
+use ratatui::{
+    layout::Rect,
+    widgets::{ListState, TableState},
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PageState {
@@ -136,6 +139,67 @@ pub enum BrowsePageUIState {
     },
 }
 
+/// A page window, identified by the focus state that selects it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum PageWindow {
+    /// The only focusable window of its page
+    Single,
+    Library(LibraryFocusState),
+    Search(SearchFocusState),
+    Artist(ArtistFocusState),
+}
+
+/// Where a page window was drawn in the last frame, used to map mouse events to its items.
+#[derive(Copy, Clone, Debug)]
+pub struct WindowRegion {
+    pub window: PageWindow,
+    pub rect: Rect,
+    /// Rows above the first item, e.g. a table header
+    pub header_height: u16,
+    pub row_height: u16,
+    /// Index of the first visible item
+    pub offset: usize,
+    pub len: usize,
+}
+
+impl WindowRegion {
+    pub fn new(rect: Rect, header_height: u16, offset: usize, len: usize) -> Self {
+        Self {
+            window: PageWindow::Single,
+            rect,
+            header_height,
+            row_height: 1,
+            offset,
+            len,
+        }
+    }
+
+    #[must_use]
+    pub fn window(self, window: PageWindow) -> Self {
+        Self { window, ..self }
+    }
+
+    #[must_use]
+    pub fn row_height(self, row_height: u16) -> Self {
+        Self { row_height, ..self }
+    }
+
+    pub fn contains(&self, column: u16, row: u16) -> bool {
+        self.rect
+            .contains(ratatui::layout::Position::new(column, row))
+    }
+
+    /// Index of the item drawn at terminal row `row`, if any.
+    pub fn item_at(&self, row: u16) -> Option<usize> {
+        let first_row = self.rect.y + self.header_height;
+        if row < first_row || row >= self.rect.bottom() {
+            return None;
+        }
+        let index = self.offset + ((row - first_row) / self.row_height.max(1)) as usize;
+        (index < self.len).then_some(index)
+    }
+}
+
 pub enum MutableWindowState<'a> {
     Table(&'a mut TableState),
     List(&'a mut ListState),
@@ -154,6 +218,22 @@ impl PageState {
             PageState::Queue { .. } => PageType::Queue,
             PageState::CommandHelp { .. } => PageType::CommandHelp,
             PageState::Logs { .. } => PageType::Logs,
+        }
+    }
+
+    /// Focus `window` if it belongs to this page.
+    pub fn focus_window(&mut self, window: PageWindow) {
+        match (self, window) {
+            (Self::Library { state }, PageWindow::Library(focus)) => state.focus = focus,
+            (Self::Search { state, .. }, PageWindow::Search(focus)) => state.focus = focus,
+            (
+                Self::Context {
+                    state: Some(ContextPageUIState::Artist { focus, .. }),
+                    ..
+                },
+                PageWindow::Artist(new_focus),
+            ) => *focus = new_focus,
+            _ => {}
         }
     }
 
@@ -445,3 +525,29 @@ impl_focusable!(
     [Shows, Episodes],
     [Episodes, Input]
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn window_region_item_at() {
+        let rect = Rect::new(0, 10, 20, 7);
+
+        // a table: header on row 10, items from row 11, scrolled by 5
+        let table = WindowRegion::new(rect, 1, 5, 8);
+        assert_eq!(table.item_at(10), None);
+        assert_eq!(table.item_at(11), Some(5));
+        assert_eq!(table.item_at(13), Some(7));
+        // rows past the last item
+        assert_eq!(table.item_at(14), None);
+        assert_eq!(table.item_at(17), None);
+
+        // a list with 2-row items (thumbnails)
+        let list = WindowRegion::new(rect, 0, 0, 10).row_height(2);
+        assert_eq!(list.item_at(10), Some(0));
+        assert_eq!(list.item_at(11), Some(0));
+        assert_eq!(list.item_at(12), Some(1));
+        assert_eq!(list.item_at(9), None);
+    }
+}

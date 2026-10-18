@@ -2,6 +2,7 @@ use super::{
     config, Block, BorderType, Borders, Frame, Line, List, ListItem, ListState, Rect, Span, Style,
     Table, TableState, Text, UIStateGuard,
 };
+use crate::state::WindowRegion;
 use unicode_bidi::BidiInfo;
 
 /// Construct and render a block.
@@ -150,15 +151,17 @@ fn adjust_list_state(state: &mut ListState, len: usize) {
     }
 }
 
+/// Render a list window, returning where it was drawn.
 pub fn render_list_window(
     frame: &mut Frame,
     widget: List,
     rect: Rect,
     len: usize,
     state: &mut ListState,
-) {
+) -> WindowRegion {
     adjust_list_state(state, len);
     frame.render_stateful_widget(widget, rect, state);
+    WindowRegion::new(rect, 0, state.offset(), len)
 }
 
 /// adjust the `selected` position of a `TableState` if that position is invalid
@@ -172,15 +175,17 @@ fn adjust_table_state(state: &mut TableState, len: usize) {
     }
 }
 
+/// Render a table window (with a one-row header), returning where it was drawn.
 pub fn render_table_window(
     frame: &mut Frame,
     widget: Table,
     rect: Rect,
     len: usize,
     state: &mut TableState,
-) {
+) -> WindowRegion {
     adjust_table_state(state, len);
     frame.render_stateful_widget(widget, rect, state);
+    WindowRegion::new(rect, 1, state.offset(), len)
 }
 
 /// Convert a string to a bidirectional string.

@@ -57,6 +57,11 @@ pub struct UIState {
     /// Count prefix for vim-style navigation (e.g., 5j, 10k)
     pub count_prefix: Option<usize>,
 
+    /// Page windows drawn in the last frame, used to handle mouse events
+    pub window_regions: Vec<WindowRegion>,
+    /// The last left click (time, window, item), used to detect double clicks
+    pub last_click: Option<(std::time::Instant, PageWindow, usize)>,
+
     #[cfg(feature = "image")]
     pub last_cover_image_render_info: ImageRenderInfo,
 
@@ -163,6 +168,9 @@ impl Default for UIState {
             playback_progress_bar_rect: Rect::default(),
 
             count_prefix: None,
+
+            window_regions: Vec::new(),
+            last_click: None,
 
             #[cfg(feature = "image")]
             last_cover_image_render_info: ImageRenderInfo::default(),

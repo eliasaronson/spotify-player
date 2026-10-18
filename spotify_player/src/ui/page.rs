@@ -18,7 +18,7 @@ use super::{
     PlaylistFolderItem, Rect, Row, SearchFocusState, SharedState, Style, Table, Text, Track,
     UIStateGuard,
 };
-use crate::state::{BidiDisplay, Thumbnail};
+use crate::state::{BidiDisplay, PageWindow, Thumbnail, WindowRegion};
 use crate::ui::utils::to_bidi_string;
 
 const COMMAND_TABLE_CONSTRAINTS: [Constraint; 3] = [
@@ -95,6 +95,10 @@ pub fn render_search_page(
     frame.render_widget(
         line_input.widget(is_active && focus_state == SearchFocusState::Input),
         search_input_rect,
+    );
+    ui.window_regions.push(
+        WindowRegion::new(search_input_rect, 0, 0, 0)
+            .window(PageWindow::Search(SearchFocusState::Input)),
     );
 
     if let Some(status) = status {
@@ -320,6 +324,7 @@ pub fn render_search_page(
     };
     let windows = [
         (
+            SearchFocusState::Tracks,
             track_list,
             track_rect,
             n_tracks,
@@ -327,6 +332,7 @@ pub fn render_search_page(
             track_thumbnails,
         ),
         (
+            SearchFocusState::Albums,
             album_list,
             album_rect,
             n_albums,
@@ -334,6 +340,7 @@ pub fn render_search_page(
             album_thumbnails,
         ),
         (
+            SearchFocusState::Artists,
             artist_list,
             artist_rect,
             n_artists,
@@ -341,6 +348,7 @@ pub fn render_search_page(
             artist_thumbnails,
         ),
         (
+            SearchFocusState::Playlists,
             playlist_list,
             playlist_rect,
             n_playlists,
@@ -348,6 +356,7 @@ pub fn render_search_page(
             playlist_thumbnails,
         ),
         (
+            SearchFocusState::Shows,
             show_list,
             show_rect,
             n_shows,
@@ -355,6 +364,7 @@ pub fn render_search_page(
             show_thumbnails,
         ),
         (
+            SearchFocusState::Episodes,
             episode_list,
             episode_rect,
             n_episodes,
@@ -362,14 +372,18 @@ pub fn render_search_page(
             episode_thumbnails,
         ),
     ];
-    let rendered = windows.map(|(list, rect, len, list_state, urls)| {
-        utils::render_list_window(frame, list, rect, len, list_state);
-        (rect, list_state.offset(), urls)
+    let row_height = thumbnail_size.map_or(1, |(_, height)| height);
+    let rendered = windows.map(|(focus, list, rect, len, list_state, urls)| {
+        let region = utils::render_list_window(frame, list, rect, len, list_state)
+            .window(PageWindow::Search(focus))
+            .row_height(row_height);
+        (region, urls)
     });
-    for (rect, offset, urls) in rendered {
+    for (region, urls) in rendered {
         if thumbnail_size.is_some() {
-            utils::render_list_thumbnails(frame, ui, rect, offset, &urls);
+            utils::render_list_thumbnails(frame, ui, region.rect, region.offset, &urls);
         }
+        ui.window_regions.push(region);
     }
 }
 
@@ -641,6 +655,7 @@ pub fn render_library_page(
     };
     let windows = [
         (
+            LibraryFocusState::Playlists,
             playlist_list,
             playlist_rect,
             n_playlists,
@@ -648,6 +663,7 @@ pub fn render_library_page(
             playlist_thumbnails,
         ),
         (
+            LibraryFocusState::SavedAlbums,
             album_list,
             album_rect,
             n_albums,
@@ -655,6 +671,7 @@ pub fn render_library_page(
             album_thumbnails,
         ),
         (
+            LibraryFocusState::FollowedArtists,
             artist_list,
             artist_rect,
             n_artists,
@@ -662,14 +679,18 @@ pub fn render_library_page(
             artist_thumbnails,
         ),
     ];
-    let rendered = windows.map(|(list, rect, len, list_state, urls)| {
-        utils::render_list_window(frame, list, rect, len, list_state);
-        (rect, list_state.offset(), urls)
+    let row_height = thumbnail_size.map_or(1, |(_, height)| height);
+    let rendered = windows.map(|(focus, list, rect, len, list_state, urls)| {
+        let region = utils::render_list_window(frame, list, rect, len, list_state)
+            .window(PageWindow::Library(focus))
+            .row_height(row_height);
+        (region, urls)
     });
-    for (rect, offset, urls) in rendered {
+    for (region, urls) in rendered {
         if thumbnail_size.is_some() {
-            utils::render_list_thumbnails(frame, ui, rect, offset, &urls);
+            utils::render_list_thumbnails(frame, ui, region.rect, region.offset, &urls);
         }
+        ui.window_regions.push(region);
     }
 }
 
@@ -745,7 +766,8 @@ pub fn render_browse_page(
     else {
         return;
     };
-    utils::render_list_window(frame, list, rect, len, list_state);
+    let region = utils::render_list_window(frame, list, rect, len, list_state);
+    ui.window_regions.push(region);
 }
 
 pub fn render_lyrics_page(
@@ -1142,14 +1164,19 @@ fn render_artist_context_page_windows(
         return;
     };
 
-    utils::render_table_window(frame, albums_table, albums_rect, n_albums, album_table);
-    utils::render_list_window(
-        frame,
-        artist_list,
-        related_artists_rect,
-        n_artists,
-        related_artist_list,
-    );
+    let regions = [
+        utils::render_table_window(frame, albums_table, albums_rect, n_albums, album_table)
+            .window(PageWindow::Artist(ArtistFocusState::Albums)),
+        utils::render_list_window(
+            frame,
+            artist_list,
+            related_artists_rect,
+            n_artists,
+            related_artist_list,
+        )
+        .window(PageWindow::Artist(ArtistFocusState::RelatedArtists)),
+    ];
+    ui.window_regions.extend(regions);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1296,26 +1323,35 @@ fn render_track_table(
         state: Some(state), ..
     } = ui.current_page_mut()
     {
-        let playable_table_state = match state {
+        let (playable_table_state, window) = match state {
             ContextPageUIState::Artist {
                 top_track_table,
                 liked_track_table,
                 ..
             } => {
                 if is_artist_liked_songs {
-                    liked_track_table
+                    (
+                        liked_track_table,
+                        PageWindow::Artist(ArtistFocusState::LikedSongs),
+                    )
                 } else {
-                    top_track_table
+                    (
+                        top_track_table,
+                        PageWindow::Artist(ArtistFocusState::TopTracks),
+                    )
                 }
             }
             ContextPageUIState::Playlist { track_table }
             | ContextPageUIState::Album { track_table }
-            | ContextPageUIState::Tracks { track_table } => track_table,
+            | ContextPageUIState::Tracks { track_table } => (track_table, PageWindow::Single),
             ContextPageUIState::Show { .. } => {
                 unreachable!("show's episode table should be handled by render_episode_table")
             }
         };
-        utils::render_table_window(frame, track_table, rect, n_tracks, playable_table_state);
+        let region =
+            utils::render_table_window(frame, track_table, rect, n_tracks, playable_table_state)
+                .window(window);
+        ui.window_regions.push(region);
     }
 }
 
@@ -1411,7 +1447,14 @@ fn render_episode_table(
             ContextPageUIState::Show { episode_table } => episode_table,
             s => unreachable!("unexpected state: {s:?}"),
         };
-        utils::render_table_window(frame, episode_table, rect, n_episodes, playable_table_state);
+        let region = utils::render_table_window(
+            frame,
+            episode_table,
+            rect,
+            n_episodes,
+            playable_table_state,
+        );
+        ui.window_regions.push(region);
     }
 }
 

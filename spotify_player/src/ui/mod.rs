@@ -154,6 +154,7 @@ fn clean_up(mut terminal: Terminal) -> Result<()> {
 fn render_application(frame: &mut Frame, state: &SharedState, ui: &mut UIStateGuard, rect: Rect) {
     #[cfg(feature = "image")]
     ui.thumbnails.begin_frame();
+    ui.window_regions.clear();
 
     // rendering order: playback window -> shortcut help popup -> other popups -> main layout
 

@@ -15,7 +15,7 @@ use crate::{
         LibraryPageUIState, PageState, PageType, PlayableId, Playback, PlaylistCreateCurrentField,
         PlaylistFolderItem, PlaylistId, PlaylistPopupAction, PopupState, SearchFocusState,
         SearchPageUIState, SharedState, ShowId, Track, TrackId, TrackOrder, TracksId, UIStateGuard,
-        USER_LIKED_TRACKS_ID, USER_RECENTLY_PLAYED_TRACKS_ID, USER_TOP_TRACKS_ID,
+        WindowRegion, USER_LIKED_TRACKS_ID, USER_RECENTLY_PLAYED_TRACKS_ID, USER_TOP_TRACKS_ID,
     },
     ui::{single_line_input::LineInput, Orientation},
     utils::parse_uri,
@@ -62,57 +62,159 @@ pub fn start_event_handler(state: &SharedState, client_pub: &flume::Sender<Clien
 }
 
 // Handle a terminal mouse event
+/// Items the selection moves per mouse wheel step
+const MOUSE_SCROLL_ITEMS: usize = 3;
+/// Longest delay between the two clicks of a double click
+const DOUBLE_CLICK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
+
 fn handle_mouse_event(
     event: crossterm::event::MouseEvent,
     client_pub: &flume::Sender<ClientRequest>,
     state: &SharedState,
 ) -> Result<()> {
+    use crossterm::event::{MouseButton, MouseEventKind};
+
     tracing::debug!("Handling mouse event: {event:?}");
 
-    let enable_scroll = config::get_config().app_config.enable_mouse_scroll_volume;
-
     match event.kind {
-        crossterm::event::MouseEventKind::ScrollUp if enable_scroll => {
-            let step = config::get_config().app_config.volume_scroll_step;
-            if let Some(ref playback) = state.player.read().buffered_playback {
-                if let Some(volume) = playback.volume {
-                    let new_volume = std::cmp::min(volume as u8 + step, 100);
-                    client_pub.send(ClientRequest::Player(PlayerRequest::Volume(new_volume)))?;
-                }
+        MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+            let down = event.kind == MouseEventKind::ScrollDown;
+            if !scroll_window_at(event, down, state) {
+                change_volume_on_scroll(down, client_pub, state)?;
             }
         }
-        crossterm::event::MouseEventKind::ScrollDown if enable_scroll => {
-            let step = config::get_config().app_config.volume_scroll_step;
-            if let Some(ref playback) = state.player.read().buffered_playback {
-                if let Some(volume) = playback.volume {
-                    let new_volume = (volume as u8).saturating_sub(step);
-                    client_pub.send(ClientRequest::Player(PlayerRequest::Volume(new_volume)))?;
-                }
-            }
-        }
-        // a left click event
-        crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
-            let rect = state.ui.lock().playback_progress_bar_rect;
-            if event.row == rect.y && event.column >= rect.x && event.column < rect.x + rect.width {
-                // calculate the seek position (in ms) based on the mouse click position,
-                // the progress bar's width and the track's duration (in ms)
-                let player = state.player.read();
-                let duration = match player.currently_playing() {
-                    Some(rspotify::model::PlayableItem::Track(track)) => Some(track.duration),
-                    Some(rspotify::model::PlayableItem::Episode(episode)) => Some(episode.duration),
-                    Some(rspotify::model::PlayableItem::Unknown(_)) | None => None,
-                };
-                if let Some(duration) = duration {
-                    let position_ms = (duration.num_milliseconds())
-                        * i64::from(event.column - rect.x)
-                        / i64::from(rect.width);
-                    client_pub.send(ClientRequest::Player(PlayerRequest::SeekTrack(
-                        chrono::Duration::try_milliseconds(position_ms).unwrap(),
-                    )))?;
-                }
+        MouseEventKind::Down(MouseButton::Left) => {
+            let seeked = seek_on_progress_bar_click(event, client_pub, state)?;
+            if !seeked {
+                click_window_at(event, client_pub, state)?;
             }
         }
         _ => {}
+    }
+    Ok(())
+}
+
+fn change_volume_on_scroll(
+    down: bool,
+    client_pub: &flume::Sender<ClientRequest>,
+    state: &SharedState,
+) -> Result<()> {
+    let configs = config::get_config();
+    if !configs.app_config.enable_mouse_scroll_volume {
+        return Ok(());
+    }
+    let step = configs.app_config.volume_scroll_step;
+    if let Some(ref playback) = state.player.read().buffered_playback {
+        if let Some(volume) = playback.volume {
+            let new_volume = if down {
+                (volume as u8).saturating_sub(step)
+            } else {
+                std::cmp::min(volume as u8 + step, 100)
+            };
+            client_pub.send(ClientRequest::Player(PlayerRequest::Volume(new_volume)))?;
+        }
+    }
+    Ok(())
+}
+
+/// Seek to the clicked position if the click hit the playback progress bar.
+fn seek_on_progress_bar_click(
+    event: crossterm::event::MouseEvent,
+    client_pub: &flume::Sender<ClientRequest>,
+    state: &SharedState,
+) -> Result<bool> {
+    let rect = state.ui.lock().playback_progress_bar_rect;
+    if event.row != rect.y || event.column < rect.x || event.column >= rect.x + rect.width {
+        return Ok(false);
+    }
+    // calculate the seek position (in ms) based on the mouse click position,
+    // the progress bar's width and the track's duration (in ms)
+    let player = state.player.read();
+    let duration = match player.currently_playing() {
+        Some(rspotify::model::PlayableItem::Track(track)) => Some(track.duration),
+        Some(rspotify::model::PlayableItem::Episode(episode)) => Some(episode.duration),
+        Some(rspotify::model::PlayableItem::Unknown(_)) | None => None,
+    };
+    if let Some(duration) = duration {
+        let position_ms = (duration.num_milliseconds()) * i64::from(event.column - rect.x)
+            / i64::from(rect.width);
+        client_pub.send(ClientRequest::Player(PlayerRequest::SeekTrack(
+            chrono::Duration::try_milliseconds(position_ms).unwrap(),
+        )))?;
+    }
+    Ok(true)
+}
+
+/// The page window under the mouse. Page windows don't react to the mouse while a popup is open.
+fn window_region_at(
+    ui: &UIStateGuard,
+    event: crossterm::event::MouseEvent,
+) -> Option<WindowRegion> {
+    if ui.popup.is_some() {
+        return None;
+    }
+    ui.window_regions
+        .iter()
+        .find(|region| region.contains(event.column, event.row))
+        .copied()
+}
+
+/// Focus the window under the mouse and move its selection. Returns whether a window was hit.
+fn scroll_window_at(event: crossterm::event::MouseEvent, down: bool, state: &SharedState) -> bool {
+    let mut ui = state.ui.lock();
+    let Some(region) = window_region_at(&ui, event) else {
+        return false;
+    };
+    if region.len == 0 {
+        return true;
+    }
+    let page = ui.current_page_mut();
+    page.focus_window(region.window);
+    let selected = page.selected().unwrap_or(0);
+    page.select(if down {
+        (selected + MOUSE_SCROLL_ITEMS).min(region.len - 1)
+    } else {
+        selected.saturating_sub(MOUSE_SCROLL_ITEMS)
+    });
+    true
+}
+
+/// Focus the clicked window and select the clicked item, choosing it on a double click.
+fn click_window_at(
+    event: crossterm::event::MouseEvent,
+    client_pub: &flume::Sender<ClientRequest>,
+    state: &SharedState,
+) -> Result<()> {
+    let mut ui = state.ui.lock();
+    let Some(region) = window_region_at(&ui, event) else {
+        return Ok(());
+    };
+    ui.current_page_mut().focus_window(region.window);
+    let Some(index) = region.item_at(event.row) else {
+        ui.last_click = None;
+        return Ok(());
+    };
+    ui.current_page_mut().select(index);
+
+    let now = std::time::Instant::now();
+    let is_double_click = ui.last_click.is_some_and(|(time, window, item)| {
+        window == region.window
+            && item == index
+            && now.duration_since(time) <= DOUBLE_CLICK_INTERVAL
+    });
+    if is_double_click {
+        ui.last_click = None;
+        // reuse the key handling of `ChooseSelected` so a double click acts exactly like it
+        let keymap_config = &config::get_config().keymap_config;
+        if let Some(keymap) = keymap_config
+            .keymaps
+            .iter()
+            .find(|k| k.command == Command::ChooseSelected)
+        {
+            page::handle_key_sequence_for_page(&keymap.key_sequence, client_pub, state, &mut ui)?;
+        }
+    } else {
+        ui.last_click = Some((now, region.window, index));
     }
     Ok(())
 }
