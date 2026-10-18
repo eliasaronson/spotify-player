@@ -5098,6 +5098,7 @@ dependencies = [
  "cpal",
  "dasp_sample",
  "num-rational",
+ "tracing",
 ]
 
 [[package]]
@@ -5748,6 +5749,7 @@ dependencies = [
  "regex",
  "reqwest",
  "reqwest-middleware",
+ "rodio",
  "rspotify",
  "rustfft",
  "rustls",

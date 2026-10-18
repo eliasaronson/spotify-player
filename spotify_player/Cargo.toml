@@ -45,6 +45,9 @@ maybe-async = "0.2.11"
 async-trait = "0.1.92"
 parking_lot = "0.12.5"
 tracing = "0.1.44"
+# Not used directly: enables rodio's `tracing` feature so audio stream errors are logged
+# instead of printed to stderr, which corrupts the TUI.
+rodio = { version = "0.21.1", default-features = false, features = ["tracing"], optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 backtrace = "0.3.76"
 souvlaki = { version = "0.8.3", optional = true }
@@ -92,10 +95,10 @@ optional = true
 [features]
 alsa-backend = ["streaming", "librespot-playback/alsa-backend"]
 pulseaudio-backend = ["streaming", "librespot-playback/pulseaudio-backend"]
-rodio-backend = ["streaming", "librespot-playback/rodio-backend"]
+rodio-backend = ["streaming", "librespot-playback/rodio-backend", "dep:rodio"]
 portaudio-backend = ["streaming", "librespot-playback/portaudio-backend"]
 jackaudio-backend = ["streaming", "librespot-playback/jackaudio-backend"]
-rodiojack-backend = ["streaming", "librespot-playback/rodiojack-backend"]
+rodiojack-backend = ["streaming", "librespot-playback/rodiojack-backend", "dep:rodio"]
 sdl-backend = ["streaming", "librespot-playback/sdl-backend"]
 gstreamer-backend = ["streaming", "librespot-playback/gstreamer-backend"]
 streaming = ["librespot-playback", "librespot-connect", "rustfft"]
@@ -124,4 +127,4 @@ pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-
 workspace = true
 
 [package.metadata.cargo-machete]
-ignored = ["async-trait", "vergen"]
+ignored = ["async-trait", "vergen", "rodio"]
