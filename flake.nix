@@ -29,10 +29,15 @@
 
               # spotify-player dependencies
               alsa-lib
+              libpulseaudio
               dbus-glib
               libsixel
               openssl
             ];
+
+            # libpulse-binding links with `-l:libpulse.so.0`, for which the Nix linker wrapper
+            # adds no rpath, so the binary couldn't find libpulse at runtime.
+            RUSTFLAGS = "-C link-arg=-Wl,-rpath,${lib.makeLibraryPath [ libpulseaudio ]}";
           };
       }
     );
