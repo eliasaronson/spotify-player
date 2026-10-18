@@ -73,7 +73,7 @@ pub fn construct_list_widget<'a>(
 }
 
 /// Construct a list widget whose rows leave room on the left for a thumbnail of `thumbnail_size`
-/// cells (see [`render_list_thumbnails`]). `None` renders a plain list.
+/// cells (see [`render_window_thumbnails`]). `None` renders a plain list.
 pub fn construct_thumbnail_list_widget<'a>(
     theme: &config::Theme,
     items: Vec<(String, bool)>,
@@ -133,21 +133,25 @@ fn thumbnail_row_text(text: &str, width: u16, height: u16) -> Text<'static> {
     Text::from(lines)
 }
 
-/// Render the thumbnails of a list previously rendered into `rect`, scrolled to `offset`.
-/// `urls[i]` is the thumbnail of the list's `i`-th item.
+/// Render the thumbnails of a window's visible items into the left edge of its rows.
+/// `urls[i]` is the thumbnail of the window's `i`-th item.
 #[cfg_attr(not(feature = "image"), allow(unused_variables))]
-pub fn render_list_thumbnails(
+pub fn render_window_thumbnails(
     frame: &mut Frame,
     ui: &mut UIStateGuard,
-    rect: Rect,
-    offset: usize,
+    region: &WindowRegion,
     urls: &[Option<String>],
 ) {
     #[cfg(feature = "image")]
     {
+        let rows = Rect {
+            y: region.rect.y + region.header_height,
+            height: region.rect.height.saturating_sub(region.header_height),
+            ..region.rect
+        };
         let ui = &mut **ui;
         ui.thumbnails
-            .render_list(&ui.picker, frame, rect, offset, urls);
+            .render_list(&ui.picker, frame, rows, region.offset, urls);
     }
 }
 

@@ -326,7 +326,7 @@ Image rendering is powered by [`ratatui-image`](https://github.com/benjajaja/rat
 **Notes**:
 
 - Protocol detection queries the terminal via stdio. In nested terminals (e.g. Neovim's floating terminal), the query does not reach the outer terminal emulator, so the protocol falls back to block characters.
-- Cover thumbnails are shown next to each row in playlist, album, artist and show lists, unless the terminal only supports block characters. Set `list_thumbnail_height` to change their height in rows, or to `0` to disable them. Thumbnails are cached in `<cache_folder>/image/thumbnails`.
+- Cover thumbnails are shown next to each row in playlist, album, artist and show lists and in track tables (except on album pages), unless the terminal only supports block characters. Set `list_thumbnail_height` to change their height in rows, or to `0` to disable them. Thumbnails are cached in `<cache_folder>/image/thumbnails`.
 
 Image rendering examples:
 

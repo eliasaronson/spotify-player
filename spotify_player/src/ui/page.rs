@@ -380,9 +380,7 @@ pub fn render_search_page(
         (region, urls)
     });
     for (region, urls) in rendered {
-        if thumbnail_size.is_some() {
-            utils::render_list_thumbnails(frame, ui, region.rect, region.offset, &urls);
-        }
+        utils::render_window_thumbnails(frame, ui, &region, &urls);
         ui.window_regions.push(region);
     }
 }
@@ -486,10 +484,10 @@ pub fn render_context_page(
                         ui.search_filtered_items(tracks),
                         ui,
                         &data,
-                        false,
+                        TrackTableKind::WithThumbnails,
                     );
                 }
-                Context::Tracks { tracks, .. } | Context::Album { tracks, .. } => {
+                Context::Tracks { tracks, .. } => {
                     render_track_table(
                         frame,
                         rect,
@@ -498,7 +496,20 @@ pub fn render_context_page(
                         ui.search_filtered_items(tracks),
                         ui,
                         &data,
-                        false,
+                        TrackTableKind::WithThumbnails,
+                    );
+                }
+                Context::Album { tracks, .. } => {
+                    // every track shares the album's cover, so thumbnails would add nothing
+                    render_track_table(
+                        frame,
+                        rect,
+                        is_active,
+                        state,
+                        ui.search_filtered_items(tracks),
+                        ui,
+                        &data,
+                        TrackTableKind::Plain,
                     );
                 }
                 Context::Show { episodes, .. } => {
@@ -687,9 +698,7 @@ pub fn render_library_page(
         (region, urls)
     });
     for (region, urls) in rendered {
-        if thumbnail_size.is_some() {
-            utils::render_list_thumbnails(frame, ui, region.rect, region.offset, &urls);
-        }
+        utils::render_window_thumbnails(frame, ui, &region, &urls);
         ui.window_regions.push(region);
     }
 }
@@ -717,6 +726,8 @@ pub fn render_browse_page(
     } else {
         None
     };
+    let thumbnail_size = ui.list_thumbnail_size();
+    let mut thumbnails = Vec::new();
     let (list, len) = match ui.current_page() {
         PageState::Browse { state: ui_state } => match ui_state {
             BrowsePageUIState::CategoryList { .. } => {
@@ -747,14 +758,17 @@ pub fn render_browse_page(
                     return;
                 };
 
-                utils::construct_list_widget(
+                let playlists = ui.search_filtered_items(playlists);
+                thumbnails = thumbnail_urls(&playlists);
+                utils::construct_thumbnail_list_widget(
                     &ui.theme,
-                    ui.search_filtered_items(playlists)
+                    playlists
                         .into_iter()
                         .map(|c| (c.name.clone(), false))
                         .collect(),
                     is_active,
                     selected_index,
+                    thumbnail_size,
                 )
             }
         },
@@ -766,7 +780,11 @@ pub fn render_browse_page(
     else {
         return;
     };
-    let region = utils::render_list_window(frame, list, rect, len, list_state);
+    let mut region = utils::render_list_window(frame, list, rect, len, list_state);
+    if !thumbnails.is_empty() {
+        region = region.row_height(thumbnail_size.map_or(1, |(_, height)| height));
+        utils::render_window_thumbnails(frame, ui, &region, &thumbnails);
+    }
     ui.window_regions.push(region);
 }
 
@@ -1077,41 +1095,52 @@ fn render_artist_context_page_windows(
     );
 
     // 3. Construct the page's widgets
+    let thumbnail_size = ui.list_thumbnail_size();
+    let row_height = thumbnail_size.map_or(1, |(_, height)| height);
+
     // album table
     let is_albums_active = is_active && focus_state == ArtistFocusState::Albums;
     let n_albums = albums.len();
+    let album_thumbnails = thumbnail_urls(&albums);
     let album_rows = albums
         .into_iter()
         .map(|a| {
-            Row::new(vec![
-                Cell::from(a.release_date.clone()),
-                Cell::from(a.album_type()),
-                Cell::from(a.name.clone()),
-            ])
+            Row::new(with_thumbnail_column(
+                thumbnail_size.map(|_| Cell::default()),
+                vec![
+                    Cell::from(a.release_date.clone()),
+                    Cell::from(a.album_type()),
+                    Cell::from(a.name.clone()),
+                ],
+            ))
+            .height(row_height)
             .style(Style::default())
         })
         .collect::<Vec<_>>();
 
     let albums_table = Table::new(
         album_rows,
-        [
-            Constraint::Length(10),
-            Constraint::Length(6),
-            Constraint::Fill(1),
-        ],
+        with_thumbnail_column(
+            thumbnail_size.map(|(width, _)| Constraint::Length(width)),
+            vec![
+                Constraint::Length(10),
+                Constraint::Length(6),
+                Constraint::Fill(1),
+            ],
+        ),
     )
     .header(
-        Row::new(vec![
-            Cell::from("Date"),
-            Cell::from("Type"),
-            Cell::from("Name"),
-        ])
+        Row::new(with_thumbnail_column(
+            thumbnail_size.map(|_| Cell::default()),
+            vec![Cell::from("Date"), Cell::from("Type"), Cell::from("Name")],
+        ))
         .style(ui.theme.table_header()),
     )
     .column_spacing(2)
     .row_highlight_style(ui.theme.selection(is_albums_active));
 
     // artist list widget
+    let artist_thumbnails = thumbnail_urls(&artists);
     let (artist_list, n_artists) = {
         let artist_items = artists
             .into_iter()
@@ -1125,7 +1154,13 @@ fn render_artist_context_page_windows(
             None
         };
 
-        utils::construct_list_widget(&ui.theme, artist_items, is_artist_active, selected_index)
+        utils::construct_thumbnail_list_widget(
+            &ui.theme,
+            artist_items,
+            is_artist_active,
+            selected_index,
+            thumbnail_size,
+        )
     };
 
     // 4. Render the page's widgets
@@ -1137,7 +1172,7 @@ fn render_artist_context_page_windows(
         tracks,
         ui,
         data,
-        false,
+        TrackTableKind::WithThumbnails,
     );
 
     render_track_table(
@@ -1148,7 +1183,7 @@ fn render_artist_context_page_windows(
         liked_tracks_filtered,
         ui,
         data,
-        true,
+        TrackTableKind::ArtistLikedSongs,
     );
 
     let PageState::Context {
@@ -1165,18 +1200,45 @@ fn render_artist_context_page_windows(
     };
 
     let regions = [
-        utils::render_table_window(frame, albums_table, albums_rect, n_albums, album_table)
-            .window(PageWindow::Artist(ArtistFocusState::Albums)),
-        utils::render_list_window(
-            frame,
-            artist_list,
-            related_artists_rect,
-            n_artists,
-            related_artist_list,
-        )
-        .window(PageWindow::Artist(ArtistFocusState::RelatedArtists)),
+        (
+            utils::render_table_window(frame, albums_table, albums_rect, n_albums, album_table)
+                .window(PageWindow::Artist(ArtistFocusState::Albums))
+                .row_height(row_height),
+            album_thumbnails,
+        ),
+        (
+            utils::render_list_window(
+                frame,
+                artist_list,
+                related_artists_rect,
+                n_artists,
+                related_artist_list,
+            )
+            .window(PageWindow::Artist(ArtistFocusState::RelatedArtists))
+            .row_height(row_height),
+            artist_thumbnails,
+        ),
     ];
-    ui.window_regions.extend(regions);
+    for (region, urls) in regions {
+        utils::render_window_thumbnails(frame, ui, &region, &urls);
+        ui.window_regions.push(region);
+    }
+}
+
+/// Which track table is rendered, deciding its thumbnails and table state.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TrackTableKind {
+    Plain,
+    WithThumbnails,
+    /// The artist page's liked songs, which has thumbnails
+    ArtistLikedSongs,
+}
+
+/// Prepend the column that row thumbnails are drawn over to a table's cells or constraints.
+/// `thumbnail_column` is `None` when thumbnails are disabled.
+fn with_thumbnail_column<T>(thumbnail_column: Option<T>, mut columns: Vec<T>) -> Vec<T> {
+    columns.splice(0..0, thumbnail_column);
+    columns
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1188,9 +1250,20 @@ fn render_track_table(
     tracks: Vec<&Track>,
     ui: &mut UIStateGuard,
     data: &DataReadGuard,
-    is_artist_liked_songs: bool,
+    kind: TrackTableKind,
 ) {
     let configs = config::get_config();
+    let thumbnail_size = if kind == TrackTableKind::Plain {
+        None
+    } else {
+        ui.list_thumbnail_size()
+    };
+    let row_height = thumbnail_size.map_or(1, |(_, height)| height);
+    let thumbnails = if thumbnail_size.is_some() {
+        thumbnail_urls(&tracks)
+    } else {
+        Vec::new()
+    };
     // get the current playing track's URI to decorate such track (if exists) in the track table
     let mut playing_track_uri = String::new();
     let mut playing_id = "";
@@ -1239,7 +1312,7 @@ fn render_track_table(
             } else {
                 (String::new(), Style::default())
             };
-            Row::new(vec![
+            let cells = vec![
                 if data.user_data.is_liked_track(t) {
                     Cell::from(&configs.app_config.liked_icon as &str).style(ui.theme.like())
                 } else {
@@ -1268,7 +1341,12 @@ fn render_track_table(
                     t.duration.as_secs() / 60,
                     t.duration.as_secs() % 60,
                 )),
-            ])
+            ];
+            Row::new(with_thumbnail_column(
+                thumbnail_size.map(|_| Cell::default()),
+                cells,
+            ))
+            .height(row_height)
             .style(style)
         })
         .collect::<Vec<_>>();
@@ -1284,52 +1362,61 @@ fn render_track_table(
     };
     let track_table = Table::new(
         rows,
-        [
-            Constraint::Length(configs.app_config.liked_icon.chars().count() as u16),
-            Constraint::Length(n_track_digits),
-            Constraint::Length(n_play_pause_chars),
-            Constraint::Fill(4),
-            Constraint::Fill(3),
-            Constraint::Fill(5),
-            if added_at_enabled {
-                Constraint::Fill(2)
-            } else {
-                Constraint::Fill(0)
-            },
-            Constraint::Fill(1),
-        ],
+        with_thumbnail_column(
+            thumbnail_size.map(|(width, _)| Constraint::Length(width)),
+            vec![
+                Constraint::Length(configs.app_config.liked_icon.chars().count() as u16),
+                Constraint::Length(n_track_digits),
+                Constraint::Length(n_play_pause_chars),
+                Constraint::Fill(4),
+                Constraint::Fill(3),
+                Constraint::Fill(5),
+                if added_at_enabled {
+                    Constraint::Fill(2)
+                } else {
+                    Constraint::Fill(0)
+                },
+                Constraint::Fill(1),
+            ],
+        ),
     )
     .header(
-        Row::new(vec![
-            Cell::from(""),
-            Cell::from(Text::from("#").alignment(Alignment::Right)),
-            Cell::from(""),
-            Cell::from("Title"),
-            Cell::from("Artists"),
-            Cell::from("Album"),
-            if added_at_enabled {
-                Cell::from("Added")
-            } else {
-                Cell::from("")
-            },
-            Cell::from("Duration"),
-        ])
+        Row::new(with_thumbnail_column(
+            thumbnail_size.map(|_| Cell::default()),
+            vec![
+                Cell::from(""),
+                Cell::from(Text::from("#").alignment(Alignment::Right)),
+                Cell::from(""),
+                Cell::from("Title"),
+                Cell::from("Artists"),
+                Cell::from("Album"),
+                if added_at_enabled {
+                    Cell::from("Added")
+                } else {
+                    Cell::from("")
+                },
+                Cell::from("Duration"),
+            ],
+        ))
         .style(ui.theme.table_header()),
     )
     .column_spacing(2)
     .row_highlight_style(ui.theme.selection(is_active));
 
-    if let PageState::Context {
+    let PageState::Context {
         state: Some(state), ..
     } = ui.current_page_mut()
-    {
+    else {
+        return;
+    };
+    let region = {
         let (playable_table_state, window) = match state {
             ContextPageUIState::Artist {
                 top_track_table,
                 liked_track_table,
                 ..
             } => {
-                if is_artist_liked_songs {
+                if kind == TrackTableKind::ArtistLikedSongs {
                     (
                         liked_track_table,
                         PageWindow::Artist(ArtistFocusState::LikedSongs),
@@ -1348,11 +1435,14 @@ fn render_track_table(
                 unreachable!("show's episode table should be handled by render_episode_table")
             }
         };
-        let region =
-            utils::render_table_window(frame, track_table, rect, n_tracks, playable_table_state)
-                .window(window);
-        ui.window_regions.push(region);
+        utils::render_table_window(frame, track_table, rect, n_tracks, playable_table_state)
+            .window(window)
+            .row_height(row_height)
+    };
+    if thumbnail_size.is_some() {
+        utils::render_window_thumbnails(frame, ui, &region, &thumbnails);
     }
+    ui.window_regions.push(region);
 }
 
 fn render_episode_table(
