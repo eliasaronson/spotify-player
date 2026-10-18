@@ -487,7 +487,8 @@ List of supported commands:
 | `BrowsePage`                    | go to the browse page                                                                              | `g b`              |
 | `Queue`                         | go to the queue page                                                                               | `z`                |
 | `OpenCommandHelp`               | go to the command help page                                                                        | `?`, `C-h`         |
-| `PreviousPage`                  | go to the previous page                                                                            | `backspace`, `C-q` |
+| `PreviousPage`                  | go to the previous page                                                                            | `backspace`, `C-q`, `C-o` |
+| `NextPage`                      | go forward to the page left via `PreviousPage` (`C-i` needs a terminal with the kitty keyboard protocol) | `C-i` |
 | `OpenLogs`                      | go the the application logs page                                                                   | `g o`              |
 | `OpenSpotifyLinkFromClipboard`  | open a Spotify link from clipboard                                                                 | `O`                |
 | `SortTrackByTitle`              | sort the track table (if any) by track's title                                                     | `s t`              |

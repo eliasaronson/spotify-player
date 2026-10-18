@@ -225,6 +225,14 @@ impl Default for KeymapConfig {
                     command: Command::PreviousPage,
                 },
                 Keymap {
+                    key_sequence: "C-o".into(),
+                    command: Command::PreviousPage,
+                },
+                Keymap {
+                    key_sequence: "C-i".into(),
+                    command: Command::NextPage,
+                },
+                Keymap {
                     key_sequence: "O".into(),
                     command: Command::OpenSpotifyLinkFromClipboard,
                 },

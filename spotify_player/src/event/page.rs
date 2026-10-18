@@ -230,10 +230,7 @@ fn handle_key_sequence_for_search_page(
                 }
                 Key::None(crossterm::event::KeyCode::Backspace) => {
                     if line_input.is_empty() {
-                        if ui.history.len() > 1 {
-                            ui.history.pop();
-                            ui.popup = None;
-                        }
+                        ui.previous_page();
                     } else {
                         line_input.input(&Key::None(crossterm::event::KeyCode::Backspace));
                     }

@@ -753,12 +753,8 @@ fn handle_global_command(
             });
             client_pub.send(ClientRequest::GetBrowseCategories)?;
         }
-        Command::PreviousPage => {
-            if ui.history.len() > 1 {
-                ui.history.pop();
-                ui.popup = None;
-            }
-        }
+        Command::PreviousPage => ui.previous_page(),
+        Command::NextPage => ui.next_page(),
         Command::OpenSpotifyLinkFromClipboard => {
             let content = get_clipboard_content().context("get clipboard's content")?;
             let re = regex::Regex::new(

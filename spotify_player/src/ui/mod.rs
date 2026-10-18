@@ -83,6 +83,16 @@ pub fn init_terminal() -> Result<Terminal> {
         crossterm::terminal::EnterAlternateScreen,
         crossterm::event::EnableMouseCapture
     )?;
+    // Lets terminals that support the kitty keyboard protocol report keys that are otherwise
+    // indistinguishable, e.g. `C-i` from `tab`.
+    if crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false) {
+        crossterm::execute!(
+            stdout,
+            crossterm::event::PushKeyboardEnhancementFlags(
+                crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+            )
+        )?;
+    }
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
     terminal.clear()?;
@@ -128,6 +138,8 @@ fn clean_up(mut terminal: Terminal) -> Result<()> {
     crossterm::terminal::disable_raw_mode()?;
     crossterm::execute!(
         terminal.backend_mut(),
+        // a no-op for terminals that never had flags pushed
+        crossterm::event::PopKeyboardEnhancementFlags,
         crossterm::terminal::LeaveAlternateScreen,
         crossterm::event::DisableMouseCapture,
     )?;

@@ -46,6 +46,8 @@ pub struct UIState {
     pub orientation: ui::Orientation,
 
     pub history: Vec<PageState>,
+    /// Pages left via `previous_page`, most recent last; cleared when a new page is opened.
+    pub forward_history: Vec<PageState>,
     pub popup: Option<PopupState>,
 
     /// The rectangle representing the playback progress bar,
@@ -86,6 +88,23 @@ impl UIState {
             }
         }
         self.history.push(page);
+        self.forward_history.clear();
+    }
+
+    /// Go back to the previous page, if any.
+    pub fn previous_page(&mut self) {
+        if self.history.len() > 1 {
+            self.forward_history.extend(self.history.pop());
+            self.popup = None;
+        }
+    }
+
+    /// Return to the page most recently left via `previous_page`, if any.
+    pub fn next_page(&mut self) {
+        if let Some(page) = self.forward_history.pop() {
+            self.history.push(page);
+            self.popup = None;
+        }
     }
 
     /// Return whether there exists a focused popup.
@@ -126,6 +145,7 @@ impl Default for UIState {
             history: vec![PageState::Library {
                 state: LibraryPageUIState::new(),
             }],
+            forward_history: Vec::new(),
             popup: None,
 
             playback_progress_bar_rect: Rect::default(),
