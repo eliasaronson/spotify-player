@@ -36,11 +36,32 @@ pub mod streaming;
 pub mod thumbnail;
 pub mod utils;
 
+/// Audio visualization animates between state changes, so it needs a fast refresh tick.
+#[cfg(feature = "streaming")]
+const VISUALIZATION_REFRESH_DURATION: std::time::Duration = std::time::Duration::from_millis(32);
+
+/// Wakes the UI thread so that it redraws without waiting for its next refresh tick.
+/// Bounded to one pending request so that bursts of requests coalesce into a single redraw.
+static REDRAW: std::sync::LazyLock<(flume::Sender<()>, flume::Receiver<()>)> =
+    std::sync::LazyLock::new(|| flume::bounded(1));
+
+/// Redraw the application as soon as possible, e.g. after handling input or updating state.
+pub fn request_redraw() {
+    // a full channel means a redraw is already pending
+    let _ = REDRAW.0.try_send(());
+}
+
 /// Run the application UI
 pub fn run(state: &SharedState, mut terminal: Terminal) -> Result<()> {
     let ui_refresh_duration = std::time::Duration::from_millis(
         config::get_config().app_config.app_refresh_duration_in_ms,
     );
+    #[cfg(feature = "streaming")]
+    let ui_refresh_duration = if state.vis_bands.is_some() {
+        ui_refresh_duration.min(VISUALIZATION_REFRESH_DURATION)
+    } else {
+        ui_refresh_duration
+    };
     let mut last_terminal_size = None;
 
     loop {
@@ -74,7 +95,13 @@ pub fn run(state: &SharedState, mut terminal: Terminal) -> Result<()> {
             }
         }
 
-        std::thread::sleep(ui_refresh_duration);
+        // State changes request a redraw, so timed redraws only need to advance the playback
+        // progress, whose displayed value changes once per second.
+        let timeout = match state.player.read().time_until_next_progress_second() {
+            Some(duration) => duration.min(ui_refresh_duration),
+            None => ui_refresh_duration,
+        };
+        let _ = REDRAW.1.recv_timeout(timeout);
     }
 }
 

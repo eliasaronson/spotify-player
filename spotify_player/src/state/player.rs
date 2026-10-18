@@ -79,6 +79,19 @@ impl PlayerState {
         }
     }
 
+    /// Time until the playback position shown in whole seconds next changes, or `None` if
+    /// playback isn't advancing.
+    pub fn time_until_next_progress_second(&self) -> Option<std::time::Duration> {
+        if !self.playback.as_ref()?.is_playing {
+            return None;
+        }
+        let progress_ms = u64::try_from(self.playback_progress()?.num_milliseconds()).ok()?;
+        // a small margin so that the redraw lands after the second boundary, not just before it
+        Some(std::time::Duration::from_millis(
+            1000 - progress_ms % 1000 + 5,
+        ))
+    }
+
     pub fn playing_context_id(&self) -> Option<ContextId> {
         match self.playback {
             Some(ref playback) => match playback.context {

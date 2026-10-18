@@ -347,7 +347,7 @@ impl Default for AppConfig {
 
             proxy: None,
             ap_port: None,
-            app_refresh_duration_in_ms: 32,
+            app_refresh_duration_in_ms: 1000,
             playback_refresh_duration_in_ms: 0,
             api_rate_limit_retries: 2,
 

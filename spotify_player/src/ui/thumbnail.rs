@@ -193,6 +193,7 @@ fn spawn_workers(loaded: &Arc<Mutex<HashMap<String, LoadState>>>) -> flume::Send
                         }
                     };
                     loaded.lock().insert(url, state);
+                    crate::ui::request_redraw();
                 }
             });
         if let Err(err) = spawned {

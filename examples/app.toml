@@ -10,7 +10,7 @@ playback_metadata_fields = ["repeat", "shuffle", "volume", "device"]
 notify_format = { summary = "{track} • {artists}", body = "{album}" }
 notify_timeout_in_secs = 0
 notify_transient = false
-app_refresh_duration_in_ms = 32
+app_refresh_duration_in_ms = 1000
 playback_refresh_duration_in_ms = 0
 api_rate_limit_retries = 2
 page_size_in_rows = 20

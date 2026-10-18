@@ -58,6 +58,7 @@ pub fn start_event_handler(state: &SharedState, client_pub: &flume::Sender<Clien
         } {
             tracing::error!("Failed to handle terminal event: {err:#}");
         }
+        crate::ui::request_redraw();
     }
 }
 

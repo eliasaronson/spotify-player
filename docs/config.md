@@ -47,7 +47,7 @@ spotify_player -o device.volume=80 -o theme=dracula
 | `ap_port`                         | Spotify session connection port.                                                                    | `None`                                                                 |
 | `proxy`                           | Spotify session connection proxy.                                                                   | `None`                                                                 |
 | `theme`                           | Name of the theme to use.                                                                           | `default`                                                              |
-| `app_refresh_duration_in_ms`      | Interval (ms) between application refreshes.                                                        | `32`                                                                   |
+| `app_refresh_duration_in_ms`      | Maximum interval (ms) between UI redraws; input, state changes and playback progress redraw sooner. | `1000`                                                                 |
 | `playback_refresh_duration_in_ms` | Interval (ms) between playback refreshes.                                                           | `0`                                                                    |
 | `api_rate_limit_retries`          | Number of times to retry an ncspot GET request after Spotify returns `429 Too Many Requests`.       | `2`                                                                    |
 | `page_size_in_rows`               | Number of rows per page for navigation.                                                             | `20`                                                                   |

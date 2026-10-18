@@ -36,6 +36,7 @@ pub async fn start_client_handler(
                 if let Err(err) = client.handle_request(&state, request).await {
                     tracing::error!("Failed to handle client request: {err:#}");
                 }
+                crate::ui::request_redraw();
             }
             .instrument(span),
         );
