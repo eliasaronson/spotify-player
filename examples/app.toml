@@ -1,7 +1,7 @@
 theme = "default"
 login_redirect_uri = "http://127.0.0.1:8989/login"
 client_id = "d420a117a32841c2b3474932e49fb54b"
-ncspot_only_get_endpoints = ["me/playlists", "search", "playlists/"]
+ncspot_only_get_endpoints = []
 client_port = 8080
 tracks_playback_limit = 50
 top_tracks_limit = 100
@@ -26,7 +26,7 @@ genre_num = 2
 cover_img_length = 0
 cover_img_width = 5
 cover_img_pixels = 16
-list_thumbnail_height = 0
+list_thumbnail_height = 2
 seek_duration_secs = 5
 custom_queue = true
 enable_relative_line_number = false

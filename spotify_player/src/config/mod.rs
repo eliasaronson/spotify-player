@@ -6,7 +6,10 @@ const DEFAULT_CACHE_FOLDER: &str = ".cache/spotify-player";
 const APP_CONFIG_FILE: &str = "app.toml";
 const THEME_CONFIG_FILE: &str = "theme.toml";
 const KEYMAP_CONFIG_FILE: &str = "keymap.toml";
-pub(crate) const DEFAULT_NCSPOT_ONLY_GET_ENDPOINTS: &[&str] = &["me/playlists", "playlists/"];
+// Empty because ncspot's client ID is shared by every ncspot and spotify-player user, so requests
+// forced onto it are heavily rate limited. Requests that a custom client is refused still fall
+// back to ncspot.
+pub(crate) const DEFAULT_NCSPOT_ONLY_GET_ENDPOINTS: &[&str] = &[];
 
 use anyhow::{anyhow, Result};
 use config_parser2::{config_parser_impl, ConfigParse, ConfigParser};
@@ -375,7 +378,7 @@ impl Default for AppConfig {
             cover_img_pixels: 16,
             // `0` disables list thumbnails
             #[cfg(feature = "image")]
-            list_thumbnail_height: 0,
+            list_thumbnail_height: 2,
 
             // Because of the "creating new window and stealing focus" behaviour
             // when running the media control event loop on startup,

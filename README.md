@@ -245,7 +245,7 @@ By default, `spotify_player` uses [ncspot](https://github.com/hrkfdn/ncspot)'s c
 
 The ncspot client ID remains available as a fallback because it is registered in [extended quota mode](https://developer.spotify.com/documentation/web-api/concepts/quota-modes) and predates Spotify's [November 2024 Web API changes](https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api). It can access endpoints (browse, personalized content, generated playlists, …) that newly-registered applications can no longer use.
 
-When a custom `client_id` is configured, `spotify-player` sends most Web API requests through that client first. If Spotify rejects custom-client request with any `4xx` response, the request is attempted once through ncspot. Successful requests and failures outside the `4xx` range do not trigger fallback.
+When a custom `client_id` is configured, `spotify-player` sends Web API requests through that client first, except GET requests to endpoints listed in `ncspot_only_get_endpoints` (none by default). If Spotify rejects custom-client request with any `4xx` response, the request is attempted once through ncspot. Successful requests and failures outside the `4xx` range do not trigger fallback.
 
 The custom client uses no request middleware. The ncspot client stores `Retry-After` durations and retries rate-limited GET requests up to two times by default; mutation requests are never delayed or retried by the middleware. Configure the ncspot retry count with `api_rate_limit_retries`; see the [configuration documentation](https://github.com/aome510/spotify-player/blob/master/docs/config.md) for details.
 
@@ -326,7 +326,7 @@ Image rendering is powered by [`ratatui-image`](https://github.com/benjajaja/rat
 **Notes**:
 
 - Protocol detection queries the terminal via stdio. In nested terminals (e.g. Neovim's floating terminal), the query does not reach the outer terminal emulator, so the protocol falls back to block characters.
-- Set `list_thumbnail_height` (e.g. `2`) to show cover thumbnails next to each row in playlist, album, artist and show lists. Thumbnails are cached in `<cache_folder>/image/thumbnails`.
+- Cover thumbnails are shown next to each row in playlist, album, artist and show lists, unless the terminal only supports block characters. Set `list_thumbnail_height` to change their height in rows, or to `0` to disable them. Thumbnails are cached in `<cache_folder>/image/thumbnails`.
 
 Image rendering examples:
 

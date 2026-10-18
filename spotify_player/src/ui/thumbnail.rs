@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use parking_lot::Mutex;
 use ratatui::{layout::Rect, Frame};
-use ratatui_image::picker::Picker;
+use ratatui_image::picker::{Picker, ProtocolType};
 
 use super::cover_image::CoverImage;
 use crate::config;
@@ -156,7 +156,8 @@ impl Thumbnails {
 /// Size of a thumbnail in terminal cells, or `None` if thumbnails are disabled.
 pub fn thumbnail_size(picker: &Picker) -> Option<(u16, u16)> {
     let height = config::get_config().app_config.list_thumbnail_height as u16;
-    if height == 0 {
+    // a block-character fallback is too coarse to show anything at thumbnail size
+    if height == 0 || picker.protocol_type() == ProtocolType::Halfblocks {
         return None;
     }
     let font_size = picker.font_size();

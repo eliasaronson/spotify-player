@@ -604,20 +604,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn current_user_playlists_uses_ncspot_without_calling_primary() {
+    async fn current_user_playlists_uses_primary_by_default() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/v1/me/playlists"))
             .and(header("authorization", "Bearer primary-token"))
             .respond_with(ResponseTemplate::new(200).set_body_string("primary"))
-            .expect(0)
+            .expect(1)
             .mount(&server)
             .await;
         Mock::given(method("GET"))
             .and(path("/v1/me/playlists"))
             .and(header("authorization", "Bearer fallback-token"))
             .respond_with(ResponseTemplate::new(200).set_body_string("ncspot"))
-            .expect(1)
+            .expect(0)
             .mount(&server)
             .await;
 
@@ -628,7 +628,7 @@ mod tests {
 
         assert_eq!(
             client.api_get("me/playlists", &Query::new()).await.unwrap(),
-            "ncspot"
+            "primary"
         );
     }
 }
