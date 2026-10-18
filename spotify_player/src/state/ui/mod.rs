@@ -62,9 +62,21 @@ pub struct UIState {
 
     #[cfg(feature = "image")]
     pub picker: Picker,
+
+    #[cfg(feature = "image")]
+    pub thumbnails: crate::ui::thumbnail::Thumbnails,
 }
 
 impl UIState {
+    /// Size `(width, height)` in cells of list-row thumbnails, or `None` if they are disabled.
+    #[cfg_attr(not(feature = "image"), allow(clippy::unused_self))]
+    pub fn list_thumbnail_size(&self) -> Option<(u16, u16)> {
+        #[cfg(feature = "image")]
+        return crate::ui::thumbnail::thumbnail_size(&self.picker);
+        #[cfg(not(feature = "image"))]
+        None
+    }
+
     pub fn current_page(&self) -> &PageState {
         self.history.last().expect("non-empty history")
     }
@@ -158,6 +170,8 @@ impl Default for UIState {
             // Will be reinitialize later in ui/mod.rs after init_ui()
             #[cfg(feature = "image")]
             picker: Picker::halfblocks(),
+            #[cfg(feature = "image")]
+            thumbnails: crate::ui::thumbnail::Thumbnails::default(),
         }
     }
 }

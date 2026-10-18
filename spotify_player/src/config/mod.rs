@@ -111,6 +111,8 @@ pub struct AppConfig {
     pub cover_img_width: usize,
     #[cfg(feature = "pixelate")]
     pub cover_img_pixels: u32,
+    #[cfg(feature = "image")]
+    pub list_thumbnail_height: usize,
 
     #[cfg(feature = "media-control")]
     pub enable_media_control: bool,
@@ -371,6 +373,9 @@ impl Default for AppConfig {
             cover_img_width: 5,
             #[cfg(feature = "pixelate")]
             cover_img_pixels: 16,
+            // `0` disables list thumbnails
+            #[cfg(feature = "image")]
+            list_thumbnail_height: 0,
 
             // Because of the "creating new window and stealing focus" behaviour
             // when running the media control event loop on startup,

@@ -1,6 +1,6 @@
 use super::{
-    config, Block, BorderType, Borders, Frame, List, ListItem, ListState, Rect, Span, Style, Table,
-    TableState,
+    config, Block, BorderType, Borders, Frame, Line, List, ListItem, ListState, Rect, Span, Style,
+    Table, TableState, Text, UIStateGuard,
 };
 use unicode_bidi::BidiInfo;
 
@@ -57,6 +57,18 @@ pub fn construct_list_widget<'a>(
     is_active: bool,
     selected_index: Option<usize>,
 ) -> (List<'a>, usize) {
+    construct_thumbnail_list_widget(theme, items, is_active, selected_index, None)
+}
+
+/// Construct a list widget whose rows leave room on the left for a thumbnail of `thumbnail_size`
+/// cells (see [`render_list_thumbnails`]). `None` renders a plain list.
+pub fn construct_thumbnail_list_widget<'a>(
+    theme: &config::Theme,
+    items: Vec<(String, bool)>,
+    is_active: bool,
+    selected_index: Option<usize>,
+    thumbnail_size: Option<(u16, u16)>,
+) -> (List<'a>, usize) {
     let configs = config::get_config();
     let n_items = items.len();
 
@@ -77,6 +89,10 @@ pub fn construct_list_widget<'a>(
                     } else {
                         s
                     };
+                    let text = match thumbnail_size {
+                        Some((width, height)) => thumbnail_row_text(&text, width, height),
+                        None => Text::from(text),
+                    };
                     ListItem::new(text).style(if is_playing {
                         theme.current_playing()
                     } else {
@@ -88,6 +104,39 @@ pub fn construct_list_widget<'a>(
         .highlight_style(theme.selection(is_active)),
         n_items,
     )
+}
+
+/// Lay out a row's text next to its thumbnail, moving the details after the first ` • ` onto
+/// the row's second line.
+fn thumbnail_row_text(text: &str, width: u16, height: u16) -> Text<'static> {
+    let pad = " ".repeat(width as usize + 1);
+    let mut lines = match text.split_once(" • ") {
+        Some((name, details)) if height > 1 => vec![
+            Line::from(format!("{pad}{name}")),
+            Line::from(format!("{pad}{details}")),
+        ],
+        _ => vec![Line::from(format!("{pad}{text}"))],
+    };
+    lines.resize(height as usize, Line::default());
+    Text::from(lines)
+}
+
+/// Render the thumbnails of a list previously rendered into `rect`, scrolled to `offset`.
+/// `urls[i]` is the thumbnail of the list's `i`-th item.
+#[cfg_attr(not(feature = "image"), allow(unused_variables))]
+pub fn render_list_thumbnails(
+    frame: &mut Frame,
+    ui: &mut UIStateGuard,
+    rect: Rect,
+    offset: usize,
+    urls: &[Option<String>],
+) {
+    #[cfg(feature = "image")]
+    {
+        let ui = &mut **ui;
+        ui.thumbnails
+            .render_list(&ui.picker, frame, rect, offset, urls);
+    }
 }
 
 /// adjust the `selected` position of a `ListState` if that position is invalid

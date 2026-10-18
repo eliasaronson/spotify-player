@@ -18,7 +18,7 @@ use super::{
     PlaylistFolderItem, Rect, Row, SearchFocusState, SharedState, Style, Table, Text, Track,
     UIStateGuard,
 };
-use crate::state::BidiDisplay;
+use crate::state::{BidiDisplay, Thumbnail};
 use crate::ui::utils::to_bidi_string;
 
 const COMMAND_TABLE_CONSTRAINTS: [Constraint; 3] = [
@@ -41,11 +41,17 @@ pub fn render_search_page(
     ui: &mut UIStateGuard,
     rect: Rect,
 ) {
-    fn search_items<T: Display>(items: &[T]) -> Vec<(String, bool)> {
+    type SearchItems = (Vec<(String, bool)>, Vec<Option<String>>);
+    fn search_items<T: Display + Thumbnail>(items: &[T]) -> SearchItems {
         items
             .iter()
-            .map(|i| (to_bidi_string(&i.to_string()), false))
-            .collect()
+            .map(|i| {
+                (
+                    (to_bidi_string(&i.to_string()), false),
+                    i.thumbnail_url().map(str::to_string),
+                )
+            })
+            .unzip()
     }
 
     // 1. Get data
@@ -172,8 +178,9 @@ pub fn render_search_page(
         construct_and_render_block("Episodes", &ui.theme, Borders::TOP, frame, chunks[5]);
 
     // 3. Construct the page's widgets
-    let (track_list, n_tracks) = {
-        let track_items = search_results
+    let thumbnail_size = ui.list_thumbnail_size();
+    let (track_thumbnails, (track_list, n_tracks)) = {
+        let (track_items, thumbnails) = search_results
             .map(|s| search_items(&s.tracks))
             .unwrap_or_default();
 
@@ -184,11 +191,18 @@ pub fn render_search_page(
             None
         };
 
-        utils::construct_list_widget(&ui.theme, track_items, is_active, selected_index)
+        let list = utils::construct_thumbnail_list_widget(
+            &ui.theme,
+            track_items,
+            is_active,
+            selected_index,
+            thumbnail_size,
+        );
+        (thumbnails, list)
     };
 
-    let (album_list, n_albums) = {
-        let album_items = search_results
+    let (album_thumbnails, (album_list, n_albums)) = {
+        let (album_items, thumbnails) = search_results
             .map(|s| search_items(&s.albums))
             .unwrap_or_default();
 
@@ -199,11 +213,18 @@ pub fn render_search_page(
             None
         };
 
-        utils::construct_list_widget(&ui.theme, album_items, is_active, selected_index)
+        let list = utils::construct_thumbnail_list_widget(
+            &ui.theme,
+            album_items,
+            is_active,
+            selected_index,
+            thumbnail_size,
+        );
+        (thumbnails, list)
     };
 
-    let (artist_list, n_artists) = {
-        let artist_items = search_results
+    let (artist_thumbnails, (artist_list, n_artists)) = {
+        let (artist_items, thumbnails) = search_results
             .map(|s| search_items(&s.artists))
             .unwrap_or_default();
 
@@ -214,11 +235,18 @@ pub fn render_search_page(
             None
         };
 
-        utils::construct_list_widget(&ui.theme, artist_items, is_active, selected_index)
+        let list = utils::construct_thumbnail_list_widget(
+            &ui.theme,
+            artist_items,
+            is_active,
+            selected_index,
+            thumbnail_size,
+        );
+        (thumbnails, list)
     };
 
-    let (playlist_list, n_playlists) = {
-        let playlist_items = search_results
+    let (playlist_thumbnails, (playlist_list, n_playlists)) = {
+        let (playlist_items, thumbnails) = search_results
             .map(|s| search_items(&s.playlists))
             .unwrap_or_default();
 
@@ -229,11 +257,18 @@ pub fn render_search_page(
             None
         };
 
-        utils::construct_list_widget(&ui.theme, playlist_items, is_active, selected_index)
+        let list = utils::construct_thumbnail_list_widget(
+            &ui.theme,
+            playlist_items,
+            is_active,
+            selected_index,
+            thumbnail_size,
+        );
+        (thumbnails, list)
     };
 
-    let (show_list, n_shows) = {
-        let show_items = search_results
+    let (show_thumbnails, (show_list, n_shows)) = {
+        let (show_items, thumbnails) = search_results
             .map(|s| search_items(&s.shows))
             .unwrap_or_default();
         let is_active = is_active && focus_state == SearchFocusState::Shows;
@@ -243,11 +278,18 @@ pub fn render_search_page(
             None
         };
 
-        utils::construct_list_widget(&ui.theme, show_items, is_active, selected_index)
+        let list = utils::construct_thumbnail_list_widget(
+            &ui.theme,
+            show_items,
+            is_active,
+            selected_index,
+            thumbnail_size,
+        );
+        (thumbnails, list)
     };
 
-    let (episode_list, n_episodes) = {
-        let episode_items = search_results
+    let (episode_thumbnails, (episode_list, n_episodes)) = {
+        let (episode_items, thumbnails) = search_results
             .map(|s| search_items(&s.episodes))
             .unwrap_or_default();
 
@@ -258,7 +300,14 @@ pub fn render_search_page(
             None
         };
 
-        utils::construct_list_widget(&ui.theme, episode_items, is_active, selected_index)
+        let list = utils::construct_thumbnail_list_widget(
+            &ui.theme,
+            episode_items,
+            is_active,
+            selected_index,
+            thumbnail_size,
+        );
+        (thumbnails, list)
     };
 
     // 4. Render the page's widgets
@@ -269,48 +318,59 @@ pub fn render_search_page(
     else {
         return;
     };
-    utils::render_list_window(
-        frame,
-        track_list,
-        track_rect,
-        n_tracks,
-        &mut page_state.track_list,
-    );
-    utils::render_list_window(
-        frame,
-        album_list,
-        album_rect,
-        n_albums,
-        &mut page_state.album_list,
-    );
-    utils::render_list_window(
-        frame,
-        artist_list,
-        artist_rect,
-        n_artists,
-        &mut page_state.artist_list,
-    );
-    utils::render_list_window(
-        frame,
-        playlist_list,
-        playlist_rect,
-        n_playlists,
-        &mut page_state.playlist_list,
-    );
-    utils::render_list_window(
-        frame,
-        show_list,
-        show_rect,
-        n_shows,
-        &mut page_state.show_list,
-    );
-    utils::render_list_window(
-        frame,
-        episode_list,
-        episode_rect,
-        n_episodes,
-        &mut page_state.episode_list,
-    );
+    let windows = [
+        (
+            track_list,
+            track_rect,
+            n_tracks,
+            &mut page_state.track_list,
+            track_thumbnails,
+        ),
+        (
+            album_list,
+            album_rect,
+            n_albums,
+            &mut page_state.album_list,
+            album_thumbnails,
+        ),
+        (
+            artist_list,
+            artist_rect,
+            n_artists,
+            &mut page_state.artist_list,
+            artist_thumbnails,
+        ),
+        (
+            playlist_list,
+            playlist_rect,
+            n_playlists,
+            &mut page_state.playlist_list,
+            playlist_thumbnails,
+        ),
+        (
+            show_list,
+            show_rect,
+            n_shows,
+            &mut page_state.show_list,
+            show_thumbnails,
+        ),
+        (
+            episode_list,
+            episode_rect,
+            n_episodes,
+            &mut page_state.episode_list,
+            episode_thumbnails,
+        ),
+    ];
+    let rendered = windows.map(|(list, rect, len, list_state, urls)| {
+        utils::render_list_window(frame, list, rect, len, list_state);
+        (rect, list_state.offset(), urls)
+    });
+    for (rect, offset, urls) in rendered {
+        if thumbnail_size.is_some() {
+            utils::render_list_thumbnails(frame, ui, rect, offset, &urls);
+        }
+    }
 }
 
 pub fn render_context_page(
@@ -504,9 +564,12 @@ pub fn render_library_page(
         construct_and_render_block("Artists", &ui.theme, Borders::ALL, frame, chunks[2]);
 
     // 3. Construct the page's widgets
+    let thumbnail_size = ui.list_thumbnail_size();
     // Construct the playlist window
-    let items = ui
-        .search_filtered_items(&data.user_data.folder_playlists_items(playlist_folder_id))
+    let folder_items = data.user_data.folder_playlists_items(playlist_folder_id);
+    let playlists = ui.search_filtered_items(&folder_items);
+    let playlist_thumbnails = thumbnail_urls(&playlists);
+    let items = playlists
         .into_iter()
         .map(|item| match item {
             PlaylistFolderItem::Playlist(p) => {
@@ -524,8 +587,13 @@ pub fn render_library_page(
     } else {
         None
     };
-    let (playlist_list, n_playlists) =
-        utils::construct_list_widget(&ui.theme, items, is_playlist_active, playlist_selected);
+    let (playlist_list, n_playlists) = utils::construct_thumbnail_list_widget(
+        &ui.theme,
+        items,
+        is_playlist_active,
+        playlist_selected,
+        thumbnail_size,
+    );
     // Construct the saved album window
     let is_album_active = is_active && focus_state == LibraryFocusState::SavedAlbums;
     let album_selected = if is_album_active {
@@ -533,14 +601,17 @@ pub fn render_library_page(
     } else {
         None
     };
-    let (album_list, n_albums) = utils::construct_list_widget(
+    let albums = ui.search_filtered_items(&data.user_data.saved_albums);
+    let album_thumbnails = thumbnail_urls(&albums);
+    let (album_list, n_albums) = utils::construct_thumbnail_list_widget(
         &ui.theme,
-        ui.search_filtered_items(&data.user_data.saved_albums)
+        albums
             .into_iter()
             .map(|a| (a.to_bidi_string(), curr_context_uri == Some(a.id.uri())))
             .collect(),
         is_album_active,
         album_selected,
+        thumbnail_size,
     );
     // Construct the followed artist window
     let is_artist_active = is_active && focus_state == LibraryFocusState::FollowedArtists;
@@ -549,14 +620,17 @@ pub fn render_library_page(
     } else {
         None
     };
-    let (artist_list, n_artists) = utils::construct_list_widget(
+    let artists = ui.search_filtered_items(&data.user_data.followed_artists);
+    let artist_thumbnails = thumbnail_urls(&artists);
+    let (artist_list, n_artists) = utils::construct_thumbnail_list_widget(
         &ui.theme,
-        ui.search_filtered_items(&data.user_data.followed_artists)
+        artists
             .into_iter()
             .map(|a| (a.to_bidi_string(), curr_context_uri == Some(a.id.uri())))
             .collect(),
         is_artist_active,
         artist_selected,
+        thumbnail_size,
     );
 
     // 4. Render the page's widgets
@@ -565,28 +639,45 @@ pub fn render_library_page(
     let PageState::Library { state: page_state } = ui.current_page_mut() else {
         return;
     };
+    let windows = [
+        (
+            playlist_list,
+            playlist_rect,
+            n_playlists,
+            &mut page_state.playlist_list,
+            playlist_thumbnails,
+        ),
+        (
+            album_list,
+            album_rect,
+            n_albums,
+            &mut page_state.saved_album_list,
+            album_thumbnails,
+        ),
+        (
+            artist_list,
+            artist_rect,
+            n_artists,
+            &mut page_state.followed_artist_list,
+            artist_thumbnails,
+        ),
+    ];
+    let rendered = windows.map(|(list, rect, len, list_state, urls)| {
+        utils::render_list_window(frame, list, rect, len, list_state);
+        (rect, list_state.offset(), urls)
+    });
+    for (rect, offset, urls) in rendered {
+        if thumbnail_size.is_some() {
+            utils::render_list_thumbnails(frame, ui, rect, offset, &urls);
+        }
+    }
+}
 
-    utils::render_list_window(
-        frame,
-        playlist_list,
-        playlist_rect,
-        n_playlists,
-        &mut page_state.playlist_list,
-    );
-    utils::render_list_window(
-        frame,
-        album_list,
-        album_rect,
-        n_albums,
-        &mut page_state.saved_album_list,
-    );
-    utils::render_list_window(
-        frame,
-        artist_list,
-        artist_rect,
-        n_artists,
-        &mut page_state.followed_artist_list,
-    );
+fn thumbnail_urls<T: Thumbnail>(items: &[T]) -> Vec<Option<String>> {
+    items
+        .iter()
+        .map(|i| i.thumbnail_url().map(str::to_string))
+        .collect()
 }
 
 pub fn render_browse_page(

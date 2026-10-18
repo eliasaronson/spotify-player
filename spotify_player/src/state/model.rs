@@ -158,6 +158,9 @@ pub struct Album {
     pub artists: Vec<Artist>,
     pub typ: Option<rspotify::model::AlbumType>,
     pub added_at: u64,
+    /// URL of a cover image suitable for list thumbnails
+    #[serde(default)]
+    pub image_url: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -165,6 +168,9 @@ pub struct Album {
 pub struct Artist {
     pub id: ArtistId<'static>,
     pub name: String,
+    /// URL of a cover image suitable for list thumbnails
+    #[serde(default)]
+    pub image_url: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -179,6 +185,9 @@ pub struct Playlist {
     #[serde(default)]
     pub current_folder_id: usize,
     pub snapshot_id: String,
+    /// URL of a cover image suitable for list thumbnails
+    #[serde(default)]
+    pub image_url: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -186,6 +195,9 @@ pub struct Playlist {
 pub struct Show {
     pub id: ShowId<'static>,
     pub name: String,
+    /// URL of a cover image suitable for list thumbnails
+    #[serde(default)]
+    pub image_url: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -453,6 +465,7 @@ impl Album {
                     _ => None,
                 }),
             added_at: 0,
+            image_url: thumbnail_url(&album.images),
         })
     }
 
@@ -483,6 +496,7 @@ impl From<rspotify::model::FullAlbum> for Album {
             artists: from_simplified_artists_to_artists(album.artists),
             typ: Some(album.album_type),
             added_at: 0,
+            image_url: thumbnail_url(&album.images),
         }
     }
 }
@@ -515,6 +529,7 @@ impl Artist {
         Some(Self {
             id: artist.id?,
             name: artist.name,
+            image_url: None,
         })
     }
 }
@@ -522,6 +537,7 @@ impl Artist {
 impl From<rspotify::model::FullArtist> for Artist {
     fn from(artist: rspotify::model::FullArtist) -> Self {
         Self {
+            image_url: thumbnail_url(&artist.images),
             name: artist.name,
             id: artist.id,
         }
@@ -532,6 +548,73 @@ impl std::fmt::Display for Artist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
+}
+
+/// An item that can be displayed with a cover thumbnail in a list.
+pub trait Thumbnail {
+    fn thumbnail_url(&self) -> Option<&str>;
+}
+
+impl<T: Thumbnail> Thumbnail for &T {
+    fn thumbnail_url(&self) -> Option<&str> {
+        (**self).thumbnail_url()
+    }
+}
+
+impl Thumbnail for Album {
+    fn thumbnail_url(&self) -> Option<&str> {
+        self.image_url.as_deref()
+    }
+}
+
+impl Thumbnail for Artist {
+    fn thumbnail_url(&self) -> Option<&str> {
+        self.image_url.as_deref()
+    }
+}
+
+impl Thumbnail for Playlist {
+    fn thumbnail_url(&self) -> Option<&str> {
+        self.image_url.as_deref()
+    }
+}
+
+impl Thumbnail for Show {
+    fn thumbnail_url(&self) -> Option<&str> {
+        self.image_url.as_deref()
+    }
+}
+
+impl Thumbnail for Track {
+    fn thumbnail_url(&self) -> Option<&str> {
+        self.album.as_ref()?.thumbnail_url()
+    }
+}
+
+impl Thumbnail for Episode {
+    fn thumbnail_url(&self) -> Option<&str> {
+        self.show.as_ref()?.thumbnail_url()
+    }
+}
+
+impl Thumbnail for PlaylistFolderItem {
+    fn thumbnail_url(&self) -> Option<&str> {
+        match self {
+            Self::Playlist(p) => p.thumbnail_url(),
+            Self::Folder(_) => None,
+        }
+    }
+}
+
+/// Pick the smallest image that is still sharp enough for a list thumbnail.
+fn thumbnail_url(images: &[rspotify::model::Image]) -> Option<String> {
+    const MIN_WIDTH: u32 = 128;
+    images
+        .iter()
+        .filter(|img| img.width.is_none_or(|w| w >= MIN_WIDTH))
+        .min_by_key(|img| img.width.unwrap_or(u32::MAX))
+        .or_else(|| images.iter().max_by_key(|img| img.width))
+        .map(|img| img.url.clone())
 }
 
 /// a helper function to convert a vector of `rspotify::model::SimplifiedArtist`
@@ -560,6 +643,7 @@ impl From<rspotify::model::SimplifiedPlaylist> for Playlist {
             desc: String::new(),
             current_folder_id: 0,
             snapshot_id: playlist.snapshot_id,
+            image_url: thumbnail_url(&playlist.images),
         }
     }
 }
@@ -582,6 +666,7 @@ impl From<rspotify::model::FullPlaylist> for Playlist {
             desc,
             current_folder_id: 0,
             snapshot_id: playlist.snapshot_id,
+            image_url: thumbnail_url(&playlist.images),
         }
     }
 }
@@ -597,6 +682,7 @@ impl BidiDisplay for Playlist {}
 impl From<rspotify::model::SimplifiedShow> for Show {
     fn from(show: rspotify::model::SimplifiedShow) -> Self {
         Self {
+            image_url: thumbnail_url(&show.images),
             id: show.id,
             name: show.name,
         }
@@ -606,6 +692,7 @@ impl From<rspotify::model::SimplifiedShow> for Show {
 impl From<rspotify::model::FullShow> for Show {
     fn from(show: rspotify::model::FullShow) -> Self {
         Self {
+            image_url: thumbnail_url(&show.images),
             id: show.id,
             name: show.name,
         }

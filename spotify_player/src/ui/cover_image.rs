@@ -37,6 +37,14 @@ impl CoverImage {
         }
     }
 
+    /// Make the next `render` re-emit a cursor-anchored image, e.g. after it was drawn over or
+    /// is being drawn at a different position.
+    pub fn invalidate(&mut self) {
+        if let Self::Iterm2 { drawn, .. } = self {
+            *drawn = false;
+        }
+    }
+
     /// Render the cover image into `area`.
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         match self {

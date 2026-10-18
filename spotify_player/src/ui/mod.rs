@@ -32,6 +32,8 @@ mod popup;
 pub mod single_line_input;
 #[cfg(feature = "streaming")]
 pub mod streaming;
+#[cfg(feature = "image")]
+pub mod thumbnail;
 pub mod utils;
 
 /// Run the application UI
@@ -56,6 +58,7 @@ pub fn run(state: &SharedState, mut terminal: Terminal) -> Result<()> {
                 {
                     // redraw the cover image when the terminal's size changes
                     ui.last_cover_image_render_info = ImageRenderInfo::default();
+                    ui.thumbnails.invalidate();
                 }
             }
 
@@ -149,6 +152,9 @@ fn clean_up(mut terminal: Terminal) -> Result<()> {
 
 /// Render the application
 fn render_application(frame: &mut Frame, state: &SharedState, ui: &mut UIStateGuard, rect: Rect) {
+    #[cfg(feature = "image")]
+    ui.thumbnails.begin_frame();
+
     // rendering order: playback window -> shortcut help popup -> other popups -> main layout
 
     // render playback window before other popups and windows to ensure nothing is rendered on top
