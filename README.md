@@ -469,8 +469,8 @@ List of supported commands:
 | `ShowActionsOnCurrentTrack`     | open a popup showing actions on the current track                                                  | `a`                |
 | `ShowActionsOnCurrentContext`   | open a popup showing actions on the current context                                                | `A`                |
 | `AddSelectedItemToQueue`        | add the selected item to queue                                                                     | `Z`, `C-z`         |
-| `FocusNextWindow`               | focus the next focusable window (if any)                                                           | `tab`              |
-| `FocusPreviousWindow`           | focus the previous focusable window (if any)                                                       | `backtab`          |
+| `FocusNextWindow`               | focus the next focusable window (if any)                                                           | `tab`, `C-w w`, `C-w C-w`, `C-w l` |
+| `FocusPreviousWindow`           | focus the previous focusable window (if any)                                                       | `backtab`, `C-w W`, `C-w h` |
 | `SwitchTheme`                   | open a popup for switching theme                                                                   | `T`                |
 | `SwitchDevice`                  | open a popup for switching device                                                                  | `D`                |
 | `Search`                        | open a popup for searching in the current page                                                     | `/`                |

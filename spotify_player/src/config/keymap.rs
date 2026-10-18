@@ -141,6 +141,26 @@ impl Default for KeymapConfig {
                     command: Command::FocusPreviousWindow,
                 },
                 Keymap {
+                    key_sequence: "C-w w".into(),
+                    command: Command::FocusNextWindow,
+                },
+                Keymap {
+                    key_sequence: "C-w C-w".into(),
+                    command: Command::FocusNextWindow,
+                },
+                Keymap {
+                    key_sequence: "C-w l".into(),
+                    command: Command::FocusNextWindow,
+                },
+                Keymap {
+                    key_sequence: "C-w W".into(),
+                    command: Command::FocusPreviousWindow,
+                },
+                Keymap {
+                    key_sequence: "C-w h".into(),
+                    command: Command::FocusPreviousWindow,
+                },
+                Keymap {
                     key_sequence: "T".into(),
                     command: Command::SwitchTheme,
                 },
