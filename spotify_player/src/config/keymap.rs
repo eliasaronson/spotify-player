@@ -232,6 +232,16 @@ impl Default for KeymapConfig {
                     key_sequence: "C-i".into(),
                     command: Command::NextPage,
                 },
+                // `C-i` is indistinguishable from tab in terminals without the kitty keyboard
+                // protocol, so also bind browser-style back/forward keys
+                Keymap {
+                    key_sequence: "M-left".into(),
+                    command: Command::PreviousPage,
+                },
+                Keymap {
+                    key_sequence: "M-right".into(),
+                    command: Command::NextPage,
+                },
                 Keymap {
                     key_sequence: "O".into(),
                     command: Command::OpenSpotifyLinkFromClipboard,
