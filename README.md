@@ -247,7 +247,7 @@ The ncspot client ID remains available as a fallback because it is registered in
 
 When a custom `client_id` is configured, `spotify-player` sends Web API requests through that client first, except GET requests to endpoints listed in `ncspot_only_get_endpoints` (none by default). If Spotify rejects custom-client request with any `4xx` response, the request is attempted once through ncspot. Successful requests and failures outside the `4xx` range do not trigger fallback.
 
-The custom client uses no request middleware. The ncspot client stores `Retry-After` durations and retries rate-limited GET requests up to two times by default; mutation requests are never delayed or retried by the middleware. Configure the ncspot retry count with `api_rate_limit_retries`; see the [configuration documentation](https://github.com/aome510/spotify-player/blob/master/docs/config.md) for details.
+The custom client uses no request middleware. The ncspot client stores `Retry-After` durations and retries rate-limited GET requests up to two times by default; mutation requests are never delayed or retried by the middleware. An artist page shows its top tracks only when ncspot answers within a few seconds, because Spotify removed that endpoint for development-mode client IDs. Configure the ncspot retry count with `api_rate_limit_retries`; see the [configuration documentation](https://github.com/aome510/spotify-player/blob/master/docs/config.md) for details.
 
 ### Using a custom client ID
 

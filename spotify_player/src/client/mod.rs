@@ -68,6 +68,28 @@ fn parse_current_playback_response(
     Ok(Some(serde_json::from_value(response)?))
 }
 
+static IN_FLIGHT_CONTEXTS: std::sync::LazyLock<parking_lot::Mutex<HashSet<String>>> =
+    std::sync::LazyLock::new(parking_lot::Mutex::default);
+
+/// Marks a context URI as being fetched until dropped.
+struct InFlightContext(String);
+
+impl InFlightContext {
+    /// Returns `None` if the context is already being fetched.
+    fn acquire(uri: &str) -> Option<Self> {
+        IN_FLIGHT_CONTEXTS
+            .lock()
+            .insert(uri.to_string())
+            .then(|| Self(uri.to_string()))
+    }
+}
+
+impl Drop for InFlightContext {
+    fn drop(&mut self) {
+        IN_FLIGHT_CONTEXTS.lock().remove(&self.0);
+    }
+}
+
 /// The application's Spotify client
 #[derive(Clone)]
 pub struct AppClient {
@@ -590,6 +612,11 @@ impl AppClient {
                     && !state.data.read().caches.context.contains_key(&uri);
                 let is_liked = uri == USER_LIKED_TRACKS_URI;
                 if cache_miss || is_liked {
+                    // The page handler re-requests a missing context every few seconds, which
+                    // must not start another fetch while a rate-limited one is still waiting.
+                    let Some(_in_flight) = InFlightContext::acquire(&uri) else {
+                        return Ok(());
+                    };
                     let ctx = match context {
                         ContextId::Playlist(playlist_id) => {
                             self.playlist_context(playlist_id).await?
@@ -1010,12 +1037,14 @@ impl AppClient {
     /// Get all albums of an artist
     pub async fn artist_albums(&self, artist_id: ArtistId<'_>) -> Result<Vec<Album>> {
         let albums = self
-            .all_paging_items::<rspotify::model::SimplifiedAlbum>(
+            .all_paging_items_with_limit::<rspotify::model::SimplifiedAlbum>(
                 &format!(
                     "artists/{}/albums?include_groups=album,single",
                     artist_id.id()
                 ),
                 0, // we don't know the total number of artist albums beforehand
+                // development-mode client IDs get a 400 for limits above 10
+                10,
             )
             .await?
             .into_iter()
@@ -1519,40 +1548,54 @@ impl AppClient {
 
     /// Get an artist context data
     pub async fn artist_context(&self, artist_id: ArtistId<'_>) -> Result<Context> {
+        const OPTIONAL_PART_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
         let artist_uri = artist_id.uri();
         tracing::info!("Get artist context: {}", artist_uri);
 
-        // get the artist's information, including top tracks, related artists, and albums
-
-        let artist = self
-            .artist(artist_id.as_ref())
-            .await
-            .context("get artist")?
-            .into();
-
+        // Top tracks are unavailable to development-mode client IDs and fall back to the
+        // shared ncspot client. Don't let its rate limit hold up the page: on failure or
+        // timeout they are left empty.
         #[allow(deprecated)]
-        let top_tracks = self
-            .artist_top_tracks(artist_id.as_ref(), Some(rspotify::model::Market::FromToken))
-            .await
-            .context("get artist's top tracks")?
-            .into_iter()
-            .filter_map(Track::try_from_full_track)
-            .collect::<Vec<_>>();
+        let (artist, top_tracks, related_artists, albums) = tokio::join!(
+            self.artist(artist_id.as_ref()),
+            tokio::time::timeout(
+                OPTIONAL_PART_TIMEOUT,
+                self.artist_top_tracks(
+                    artist_id.as_ref(),
+                    Some(rspotify::model::Market::FromToken)
+                )
+            ),
+            tokio::time::timeout(
+                OPTIONAL_PART_TIMEOUT,
+                self.artist_related_artists(artist_id.as_ref())
+            ),
+            self.artist_albums(artist_id.as_ref()),
+        );
 
-        #[allow(deprecated)]
-        let related_artists = self
-            .artist_related_artists(artist_id.as_ref())
-            .await
+        let artist = artist.context("get artist")?.into();
+        let top_tracks = match top_tracks {
+            Ok(Ok(tracks)) => tracks,
+            Ok(Err(err)) => {
+                tracing::warn!("Failed to get artist's top tracks: {err:#}");
+                Vec::new()
+            }
+            Err(_) => {
+                tracing::warn!("Timed out getting artist's top tracks");
+                Vec::new()
+            }
+        }
+        .into_iter()
+        .filter_map(Track::try_from_full_track)
+        .collect::<Vec<_>>();
+        let related_artists = related_artists
             .ok()
+            .and_then(Result::ok)
             .unwrap_or_default()
             .into_iter()
             .map(std::convert::Into::into)
             .collect::<Vec<_>>();
-
-        let albums = self
-            .artist_albums(artist_id.as_ref())
-            .await
-            .context("get artist's albums")?;
+        let albums = albums.context("get artist's albums")?;
 
         Ok(Context::Artist {
             artist,
@@ -1595,11 +1638,22 @@ impl AppClient {
         Ok(serde_json::from_str(&text)?)
     }
 
-    async fn all_paging_items<T>(&self, base_url: &str, mut count: usize) -> Result<Vec<T>>
+    async fn all_paging_items<T>(&self, base_url: &str, count: usize) -> Result<Vec<T>>
     where
         T: serde::de::DeserializeOwned + std::fmt::Debug,
     {
-        const PAGE_LIMIT: usize = 50;
+        self.all_paging_items_with_limit(base_url, count, 50).await
+    }
+
+    async fn all_paging_items_with_limit<T>(
+        &self,
+        base_url: &str,
+        mut count: usize,
+        page_limit: usize,
+    ) -> Result<Vec<T>>
+    where
+        T: serde::de::DeserializeOwned + std::fmt::Debug,
+    {
         const MAX_PARALLEL: usize = 4;
 
         let mut all_items = Vec::new();
@@ -1612,13 +1666,13 @@ impl AppClient {
         }
 
         while offset < count {
-            n_jobs = std::cmp::min(n_jobs, (count - offset).div_ceil(PAGE_LIMIT));
+            n_jobs = std::cmp::min(n_jobs, (count - offset).div_ceil(page_limit));
 
             let mut futures = Vec::with_capacity(n_jobs);
 
             for i in 0..n_jobs {
-                let current_offset = offset + i * PAGE_LIMIT;
-                let limit_str = PAGE_LIMIT.to_string();
+                let current_offset = offset + i * page_limit;
+                let limit_str = page_limit.to_string();
                 let offset_str = current_offset.to_string();
 
                 futures.push(async move {
@@ -1636,7 +1690,7 @@ impl AppClient {
 
             let mut found_partial_page = false;
             for mut page in results {
-                if page.items.len() < PAGE_LIMIT {
+                if page.items.len() < page_limit {
                     found_partial_page = true;
                 }
                 all_items.append(&mut page.items);
@@ -1646,7 +1700,7 @@ impl AppClient {
                 break;
             }
 
-            offset += n_jobs * PAGE_LIMIT;
+            offset += n_jobs * page_limit;
             // gradually increase the number of parallel jobs, but do not exceed MAX_PARALLEL
             n_jobs = std::cmp::min(n_jobs + 1, MAX_PARALLEL);
         }
