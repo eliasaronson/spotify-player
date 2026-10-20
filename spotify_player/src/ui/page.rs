@@ -1110,7 +1110,7 @@ fn render_artist_context_page_windows(
         .into_iter()
         .map(|a| {
             Row::new(with_thumbnail_column(
-                thumbnail_size.map(|_| Cell::default()),
+                thumbnail_size.map(|_| Cell::from("")),
                 vec![
                     Cell::from(a.release_date.clone()),
                     Cell::from(a.album_type()),
@@ -1135,7 +1135,7 @@ fn render_artist_context_page_windows(
     )
     .header(
         Row::new(with_thumbnail_column(
-            thumbnail_size.map(|_| Cell::default()),
+            thumbnail_size.map(|_| Cell::from("")),
             vec![Cell::from("Date"), Cell::from("Type"), Cell::from("Name")],
         ))
         .style(ui.theme.table_header()),
@@ -1239,7 +1239,8 @@ enum TrackTableKind {
 }
 
 /// Prepend the column that row thumbnails are drawn over to a table's cells or constraints.
-/// `thumbnail_column` is `None` when thumbnails are disabled.
+/// `thumbnail_column` is `None` when thumbnails are disabled. Row cells must not be
+/// `Cell::default()`, whose zero column span makes the following cells shift left.
 fn with_thumbnail_column<T>(thumbnail_column: Option<T>, mut columns: Vec<T>) -> Vec<T> {
     columns.splice(0..0, thumbnail_column);
     columns
@@ -1347,7 +1348,7 @@ fn render_track_table(
                 )),
             ];
             Row::new(with_thumbnail_column(
-                thumbnail_size.map(|_| Cell::default()),
+                thumbnail_size.map(|_| Cell::from("")),
                 cells,
             ))
             .height(row_height)
@@ -1386,7 +1387,7 @@ fn render_track_table(
     )
     .header(
         Row::new(with_thumbnail_column(
-            thumbnail_size.map(|_| Cell::default()),
+            thumbnail_size.map(|_| Cell::from("")),
             vec![
                 Cell::from(""),
                 Cell::from(Text::from("#").alignment(Alignment::Right)),
